@@ -1,7 +1,7 @@
 
-# Polis dev sdk
+# Nuvo dev sdk
 
-Polis dev sdk contains Oauth2Client, HttpClient
+Nuvo dev sdk contains Oauth2Client, HttpClient
 
 ## new 
 PolisClient,PolisProvider
