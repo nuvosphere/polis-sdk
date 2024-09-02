@@ -1,11 +1,26 @@
 // vue.config.js
 module.exports = {
+    configureWebpack: {
+        module: {
+            rules: [
+                {
+                    test: /\.js$/,
+                    use: {
+                        loader: 'babel-loader',
+                        options: {
+                            presets: ['@babel/preset-env']
+                        }
+                    }
+                }
+            ]
+        }
+    },
     devServer: {
         disableHostCheck: true,
         hot: true,
         open: true,
         // 域名
-        host: '127.0.0.1',
+        host: '0.0.0.0',
         // 端口
         port: 8000,
         // 代理

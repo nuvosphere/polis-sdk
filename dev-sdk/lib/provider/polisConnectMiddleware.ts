@@ -38,46 +38,50 @@ export default function createPolisConnectMiddleware(opts: IPolisProviderOpts,pr
         if(provider){
             provider.emit('debug',req)
         }
-        if (!opts.token && signingMethods.includes(req.method)) {
-            provider?.emit('error',`Invalid value for 'token': "${opts.token}" (${typeof opts.token})`)
-            throw new Error(`Invalid value for 'token': "${opts.token}" (${typeof opts.token})`)
-        }
-        // retry MAX_ATTEMPTS times, if error matches filter
-        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-            try {
-                // attempt request
-                req.token = opts.token
-                //sign method
-                if( signingMethods.includes(req.method)){
-                    attempt = maxAttempts;
+
+        if(provider instanceof PolisProvider && provider.accountAddress && req.method === 'eth_accounts'){
+                res.result = provider.accountAddress;
+        }else {
+            if (!opts.token && signingMethods.includes(req.method)) {
+                provider?.emit('error', `Invalid value for 'token': "${opts.token}" (${typeof opts.token})`)
+                throw new Error(`Invalid value for 'token': "${opts.token}" (${typeof opts.token})`)
+            }
+            // retry MAX_ATTEMPTS times, if error matches filter
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                try {
+                    // attempt request
+                    req.token = opts.token
+                    //sign method
+                    if (signingMethods.includes(req.method)) {
+                        attempt = maxAttempts;
+                    }
+                    await performFetch(req, res, opts, provider)
+                    // request was successful
+                    break
+                } catch (err) {
+                    // an error was caught while performing the request
+                    // if not retriable, resolve with the encountered error
+                    if (!isRetriableError(err)) {
+                        // abort with error
+                        throw err
+                    }
+                    // if no more attempts remaining, throw an error
+                    const remainingAttempts = maxAttempts - attempt
+                    if (!remainingAttempts) {
+                        // const errMsg = `PolisProvider - cannot complete request. All retries exhausted.\nOriginal Error:\n${err.toString()}\n\n`
+                        // const retriesExhaustedErr = new Error(err)
+                        res.error = err;
+                    }
+                    // otherwise, ignore error and retry again after timeout
+                    await timeout(1000)
                 }
-                await performFetch(req, res, opts,provider)
-                // request was successful
-                break
-            } catch (err) {
-                // an error was caught while performing the request
-                // if not retriable, resolve with the encountered error
-                if (!isRetriableError(err)) {
-                  // abort with error
-                  throw err
-                }
-                // if no more attempts remaining, throw an error
-                const remainingAttempts = maxAttempts - attempt
-                if (!remainingAttempts) {
-                    // const errMsg = `PolisProvider - cannot complete request. All retries exhausted.\nOriginal Error:\n${err.toString()}\n\n`
-                    // const retriesExhaustedErr = new Error(err)
-                    res.error = err;
-                }
-                // otherwise, ignore error and retry again after timeout
-                await timeout(1000)
+            }
+            // request was handled correctly, end
+            if (provider) {
+                provider.emit('debug', Object.assign({}, {action: 'connectMiddleware response'}, res))
             }
         }
-        // request was handled correctly, end
-        if(provider){
-            provider.emit('debug',Object.assign({},{action:'connectMiddleware response'},res))
-        }
         next();
-
     })
 }
 
@@ -148,7 +152,7 @@ function fetchConfigFromReq(req: any, res: any, opts: IPolisProviderOpts, provid
         headers['chainId'] = provider.chainId;
     }
     const rpcUrl = opts.apiHost ? opts.apiHost + 'api/rpc/v1' : 'https://one.nuvosphere.io/api/rpc/v1';
-    console.log("host:",provider.host);
+    // console.log("host:",provider.host);
     if(provider)
         provider.emit('debug',{
                 action:'request config',

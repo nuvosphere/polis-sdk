@@ -1,14 +1,12 @@
 // import WalletConnectProvider from "@walletconnect/web3-provider";
 // import Web3Modal from "@/utils/WallectConnector";
-import { providers, ethers } from "ethers";
+import {  ethers } from "ethers";
 import WalletConnectProvider from "@walletconnect/web3-provider";
 
 import WalletConnect from "@walletconnect/client";
 import QRCodeModal from "@walletconnect/qrcode-modal";
 import errors from "./erros";
 import log from "./utils/log"
-
-import keccak256 from 'keccak256';
 
 function getWalletConnector() {
     //  Create WalletConnect Provider
@@ -53,7 +51,7 @@ async function signMessage(connector:WalletConnect,msg: string): Promise<any> {
     if (connector.connected) {
         try {
             const address = connector.accounts[0];
-            const msgHex =  ethers.utils.hexlify(msg);
+            const msgHex =  ethers.hexlify(msg);
             const msgParams = [
                 msgHex,
                 address,                            // Required
@@ -71,7 +69,7 @@ async function signPersonalMessage(connector:WalletConnect,msg: string): Promise
     if (connector.connected) {
         try {
             const address = connector.accounts[0];
-            const msgHex =  ethers.utils.toUtf8Bytes(msg);
+            const msgHex =  ethers.toUtf8Bytes(msg);
             return connector.signPersonalMessage([msgHex,address])
         } catch (e:any) {
             return Promise.reject(e.message)

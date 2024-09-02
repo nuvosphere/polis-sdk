@@ -13,17 +13,26 @@ import axios from 'axios';
 import Swal from 'sweetalert2';
 import errData from "./error";
 import log from './provider/utils/log'
+import sdkErrors from "./provider/erros";
 
 export class Oauth2Client implements IOauth2Client {
     endpoints = new endpoints();
     oauthRedirectUrl: string = this.endpoints.getOauthRedirectUrl();
     apiHost: string = this.endpoints.getApiHost();
+    oauthHost:string = this.endpoints.authHost;
     oauth2User?: IOauth2User;
 
-    constructor(apiHost:string = '') {
+    constructor(apiHost:string = '',oauthHost:string = '') {
         this.endpoints = new endpoints(apiHost);
         this.oauthRedirectUrl = this.endpoints.getOauthRedirectUrl();
         this.apiHost = this.endpoints.getApiHost();
+        this.oauthHost = this.endpoints.authHost;
+        if(oauthHost){
+            this.oauthHost = oauthHost;
+            if(!this.oauthHost.endsWith("/")){
+                this.oauthHost = this.oauthHost +"/";
+            }
+        }
     }
 
     startOauth2(appId: string, returnUrl: string, newWindow: boolean = false, switchAccount:boolean = false): Window | null {
@@ -42,16 +51,16 @@ export class Oauth2Client implements IOauth2Client {
         return null;
     }
     
-    logout(appId:string, accessToken:string, refreshToken:string): Promise<any> {
-       //  const headers = {
-       //      'Content-Type': 'application/json',
-       //      'Access-Token': accessToken,
-       //  };
-       // const res =  axios.get(this.apiHost + `/api/v1/oauth2/logout?app_id=${appId}&token=${accessToken}&refresh_token=${refreshToken}`,{headers});
+    logout(appId:string, accessToken:string, refreshToken:string=''): Promise<any> {
+        const headers = {
+            'Content-Type': 'application/json',
+            'Access-Token': accessToken,
+        };
+       // const res =  axios.get(this.apiHost + `api/v1/oauth2/logout?app_id=${appId}&token=${accessToken}&refresh_token=${refreshToken}`,{headers});
        // if (res.code == 200) {
        // }
-        const logoutUrl = this.apiHost + `/#/oauth2-logout`;
-        const hostUrl = this.apiHost;
+        const logoutUrl = this.oauthHost + `#/oauth2-logout`;
+        const hostUrl = this.oauthHost;
         const logoutWin = Swal.fire({
             title: '<span style="font-size: 24px;font-weight: bold;color: #FFFFFF;font-family: Helvetica-Bold, Helvetica"></span>',
             html: `<iframe src="${logoutUrl}" style="width: 100%; height: 0px;" frameborder="0" id="metisLogoutIframe"></iframe>`,
@@ -68,16 +77,16 @@ export class Oauth2Client implements IOauth2Client {
         });
         return new Promise((resolve, reject) => {
             window.addEventListener('message', (event) => {
-                if (event.origin !== 'https://polis.metis.io' && event.origin !== 'http://localhost:1024' && event.origin !== window.location.origin) {
+                if (event.origin + "/" != this.oauthHost) {
                     return;
                 }
                 if (event.data && event.data.op) {
                     if (event.data.logout) {
                         Swal.close();
-                        return resolve({status: 0, msg: event.data.msg});
+                        return resolve({status: 200, msg: event.data.msg});
                     } else {
                         Swal.fire(event.data.msg);
-                        return reject({status: errData.MM_ACCOUNT_LOGOUT_ERROR, msg: event.data.msg});
+                        return reject({status: sdkErrors.LOGOUT_ERROR.code, msg: event.data.msg});
                     }
                 }
             }, false);

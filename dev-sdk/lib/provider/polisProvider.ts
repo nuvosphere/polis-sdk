@@ -9,8 +9,9 @@ import { BridgeTransactionInfo, DomainTransactionInfo, IPolisProviderOpts, Trans
 import httpRequest from "./utils/httpRequest";
 import dialog, { showLoading } from "./utils/dialog";
 import createPolisConnectMiddleware from "./polisConnectMiddleware";
-import { PolisEvents, WALLET_TYPES } from "./utils";
+import {PolisEvents, THIRD_WALLETS, WALLET_TYPES} from "./utils";
 import mmWallet, { checkMetaMaskInstall, signMessage } from './metaMaskWallet';
+import pcProviderWallet from './pcProviderWallet';
 
 // import wc from "./wallectConnector";
 import axios from "axios";
@@ -23,19 +24,20 @@ import log from "./utils/log"
 import sdkErrors from "./erros";
 import { TX_TYPE } from "../provider/utils";
 import {isIOS, isMobile} from "./utils/browser";
-
+import { Eip1193Provider } from "ethers"
 let _nextId = 1;
 
 /**
  *
  */
-export class PolisProvider extends JsonRpcEngine {
+export class PolisProvider extends JsonRpcEngine implements Eip1193Provider {
     _confirmUrl: string = '';
     _apiHost: string = '';
     _oauthHost:string =''
     host:string = '';
     _chainId: number = -1;
     _wallet_type: string = '';
+    _address:string = '';
     // private _eventManager: EventManager = new EventManager();
     _polisOauth2Client?: PolisOauth2Client;
     swalPromise: any = null;
@@ -112,6 +114,9 @@ export class PolisProvider extends JsonRpcEngine {
     
     get walletType() {
         return this._wallet_type;
+    }
+    get accountAddress(){
+        return this._address;
     }
     
     //endregion properties
@@ -193,8 +198,9 @@ export class PolisProvider extends JsonRpcEngine {
         }
         //
         this.push(this.createPolisWallet());
+        // connect to polis
         this.push(createPolisConnectMiddleware(this.providerOpts, this));
-        
+        // end connect to polis,and handle response
         this.push(async (req, res:any, next, end) => {
             if (req.method === 'eth_accounts') {
                 this.emit('debug', `eth_accounts => ${JSON.stringify(res)}`);
@@ -214,6 +220,7 @@ export class PolisProvider extends JsonRpcEngine {
                         mmWallet.addMetamaskEventCallback(PolisEvents.ACCOUNTS_CHANGED_EVENT, null);
                     }
                 }
+                this._address = res.result;
             }
             if (req.method === 'personal_sign') {
                 res.result = res.result.signMsg;
@@ -243,18 +250,76 @@ export class PolisProvider extends JsonRpcEngine {
         //if reject what polisTX
         let walletType = "";
         try {
-            const estimateTx:DomainTransactionInfo = await this.estimatePolisTrans(req);
+            /*
+            * request
+            * {
+                "id": 999,
+                "jsonrpc": "2.0",
+                "method": "eth_sendTransaction",
+                "params": [
+                    {
+                        "to": "0xA35f56ebF874Df1B6aC09E72528e1a86D4F1EF2B",
+                        "value": "0x2386f26fc10000",
+                        "gasLimit": "0x5208"
+                    }
+                ]
+            }
+            * reponse
+            * {
+                    "act": "SIGN",
+                    "blsWalletOpen": false,
+                    "chainId": 59902,
+                    "chainUrl": "https://sepolia.metisdevops.link",
+                    "data": "",
+                    "fee": "0.00002121",
+                    "feeTxt": "0.00002121 Metis",
+                    "from": "0xA35f56ebF874Df1B6aC09E72528e1a86D4F1EF2B",
+                    "gas": 21210,
+                    "gasLimit": 21210,
+                    "gasPrice": 1000000000,
+                    "isMetamask": true,
+                    "isThirdwallet": true,
+                    "nonce": 760,
+                    "symbol": "Metis",
+                    "to": "0xA35f56ebF874Df1B6aC09E72528e1a86D4F1EF2B",
+                    "txType": "TX",
+                    "value": "10000000000000000",
+                    "walletType": "METAMASK",
+                    "wallet_pwd_state": 1
+                }
+            *
+            * */
+            var estimateTx:any = null;
+            if(THIRD_WALLETS.includes(this.walletType)){
+                estimateTx = {
+                    "act": "SIGN",
+                    "chainId": this.chainId.toString(),
+                    "from": this.accountAddress[0],
+                    "gasLimit": req.params[0].gasLimit,
+                    "gas": req.params[0].gasLimit,
+                    "to": req.params[0].to,
+                    "txType": "TX",
+                    "value": req.params[0].value,
+                    "walletType": this.walletType,
+                    "data": req.params[0].data
+                }
+            }else{
+                estimateTx = await this.estimatePolisTrans(req);
+            }
+            //bitget wallet not support iframe
+            if (this.walletType!=WALLET_TYPES.BITGET && (this._bridgeTx || this.walletType == WALLET_TYPES.LOCAL || this.walletType == WALLET_TYPES.POLIS)) {
 
-            if (this._bridgeTx || this.walletType == WALLET_TYPES.LOCAL || this.walletType == WALLET_TYPES.POLIS) {
                 return   this.confirmTransBridge(req, res,estimateTx);
             }
+
             walletType = estimateTx.walletType;
             this.emit(PolisEvents.TX_CONFIRM_EVENT, Object.assign({}, {action: 'polis response estimate done'}, estimateTx));
             this.emit(PolisEvents.TX_CONFIRM_DIALOG_EVENT, {walletType, action: 'open'});
             const sendTx = estimateTx;
             if (sendTx != undefined && sendTx.act && sendTx.act === 'SIGN') {
                 log.debug("_bridgeMetamask:", this._bridgeTx)
-                if (sendTx.walletType == 'METAMASK') {
+                if (sendTx.walletType == 'METAMASK'
+                ) {
                     let confirmData: any;
                     // const metaTxHash = await this.metaMaskSendTransaction(this.chainId, estimateTx);
                     if (this._bridgeTx) {
@@ -293,6 +358,10 @@ export class PolisProvider extends JsonRpcEngine {
                         res.result = metaTxHash;
                     }
                 }
+                else if(sendTx.walletType == WALLET_TYPES.BITGET){
+                    const metaTxHash = await this.bitgetSendTransaction(this.chainId, estimateTx);
+                    res.result = metaTxHash;
+               }
                 else if (sendTx.walletType == 'WALLETCONNECT') {
                     const wcTxHash = await this.walletConnectSendTransaction(this.chainId, estimateTx);
                     res.result = wcTxHash;
@@ -326,9 +395,11 @@ export class PolisProvider extends JsonRpcEngine {
                     break;
                 case WALLET_TYPES.WC:
                 case WALLET_TYPES.MM:
+                case WALLET_TYPES.BITGET:
                     confirmData = await this.polisBridgePage(estimateTx);
                     break;
                 default:
+                    confirmData = await this.polisBridgePage(estimateTx);
                     break;
             }
             if (confirmData.code == 200 && (confirmData.data.act == 'CREATE' || confirmData.data.act== "SUCCESS" )) {
@@ -363,7 +434,7 @@ export class PolisProvider extends JsonRpcEngine {
     
     async signMessage(req: any, res: any, walletType: string) {
         let signMsg: any;
-        if (this._bridgeTx || walletType == WALLET_TYPES.LOCAL ) {
+        if (walletType!= WALLET_TYPES.BITGET && (this._bridgeTx || walletType == WALLET_TYPES.LOCAL) ) {
             let postData = {
                 signContent: req.params[0],
                 txType: TX_TYPE.SIGN,
@@ -381,7 +452,16 @@ export class PolisProvider extends JsonRpcEngine {
             }
             signMsg = await mmWallet.signMessage(req.params[0]);
             return signMsg;
-        } else if (walletType == "WALLETCONNECT") {
+        }
+        if (walletType == WALLET_TYPES.BITGET) {
+            if (!pcProviderWallet.checkInstall()) {
+                this.emit("error", "BitGet wallet not install.")
+                return Promise.reject(errors.MM_NOT_INSTALL);
+            }
+            signMsg = await pcProviderWallet.signMessage(req.params[0]);
+            return signMsg;
+        }
+        else if (walletType == "WALLETCONNECT") {
             // this.initWcConnector();
             // if (this._wcConnector) {
             //     const signMsg = wallectConnector.signMessage(this._wcConnector, req.params[0]);
@@ -436,9 +516,28 @@ export class PolisProvider extends JsonRpcEngine {
         if(iframeId) {
             // if has iframeId must send message to iframe
             // if is new Window must send to open window
-            document.getElementById(iframeId)!.onload = function () {
-                (document.getElementById(iframeId) as HTMLIFrameElement).contentWindow!.postMessage(transObj, confirmUrl.split('/#')[0]);
-            };
+            // document.getElementById(iframeId)!.onload = function () {
+            //     (document.getElementById(iframeId) as HTMLIFrameElement).contentWindow!.postMessage(transObj, confirmUrl.split('/#')[0]);
+            // };
+            // document.getElementById(iframeId)!.addEventListener("load", function () {
+            //     (document.getElementById(iframeId) as HTMLIFrameElement).contentWindow!.postMessage(transObj, confirmUrl.split('/#')[0]);
+            //     console.log("DOMContentLoaded send msg done");
+            //
+            // });
+            const authhost= this.authHost;
+            function sendMsgToIframe(event:any) {
+                if (event.origin + "/" != authhost && event.origin !== window.location.origin) {
+                    return;
+                }
+                if (event.data.type == "nuvoLoaded" && event.data.data.status == "LOADED") {
+                    (document.getElementById(iframeId) as HTMLIFrameElement).contentWindow!.postMessage(transObj, confirmUrl.split('/#')[0]);
+                    console.log("DOMContentLoaded send msg done");
+                    window.removeEventListener('message', sendMsgToIframe, false);
+                }
+            }
+            window.addEventListener('message', sendMsgToIframe  ,
+                false);
+
             // remove swal2 default margin and padding in full screen class for walletconnect pop up
             let swal2Contain = document.querySelector('.swal2-container.full-screen')
             if(swal2Contain)  {
@@ -715,6 +814,56 @@ export class PolisProvider extends JsonRpcEngine {
                 return Promise.resolve(res.trans.txhash);
             }
             
+            return new Promise<any>((resolve, reject) => {
+                resolve(res);
+            });
+        } else {
+            // error(res?.data);
+            return Promise.reject(errors.MM_ERROR);
+        }
+    }
+
+    private async bitgetSendTransaction(chainId: number, tx: any) {
+        if (!this.token) {
+            //todo not auth
+            return null;
+        }
+        const chainObj = await this.getChainUrl(chainId);
+        if (!pcProviderWallet.checkInstall()) {
+            this.emit("error", "metamask not install.")
+            return Promise.reject(errors.MM_NOT_INSTALL);
+        }
+        const res = await pcProviderWallet.sendTrans(tx, chainObj);
+        let savedTx: any;
+        if (res != null) {
+            if (typeof (res) == 'object') { //domain
+                try {
+                    savedTx = await this.saveTx(this.apiHost, this.token, 'save_app_tx', res, true);
+                    this.emit('debug', Object.assign({}, {action: 'save-tx'}, savedTx));
+                    if (savedTx == null) {
+                        // server save tx error ,also return but status = IN_PROGRESSING because tx had success
+                        savedTx = {
+                            tx: res,
+                            status: 'SERVER_ERROR',
+                            chainId: tx.chainId,
+                            domain: tx.domain,
+                            data: 'ok',
+                            act: 'CREATE',
+                            value: tx.value,
+                        };
+                        this.emit('warning', Object.assign({}, {action: 'save-tx error'}, res));
+                        return new Promise<any>((resolve, reject) => {
+                            resolve(res.trans.txhash);
+                        });
+                    }
+                } catch (e) {
+                    log.warn(e)
+                    this.emit('warning', Object.assign({}, {action: 'save-tx error'}, e));
+                    return Promise.resolve(res.trans.txhash);
+                }
+                this.emit('debug', Object.assign({}, {action: 'save-tx surccess'}, savedTx));
+                return Promise.resolve(res.trans.txhash);
+            }
             return new Promise<any>((resolve, reject) => {
                 resolve(res);
             });

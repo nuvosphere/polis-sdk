@@ -5,7 +5,7 @@ class Endpoints {
     // confirmUrl: string =  '#/oauth2/confirm-tx';
     confirmUrl: string =  '#/oauth2/confirm';
     apiHost = 'https://api.nuvosphere.io/';
-    authHost = this.apiHost.replace("//api.","//auth.")
+    authHost = this.apiHost.replace("//api.","//oauth.")
     oauthRedirectUrl: string = '#/oauth2-login?';
     // testWsServer: string = 'ws://test-polis.metis.io:5000/wss/mts-l2';
     // testConfirmUrl: string = 'https://test-polis.metis.io/#/oauth2/confirm-tx';

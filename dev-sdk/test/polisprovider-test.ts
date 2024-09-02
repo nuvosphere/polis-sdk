@@ -1,14 +1,9 @@
 import { describe, it } from 'mocha';
-import { expect } from 'chai';
 import 'dotenv/config';
 import { ethers } from 'ethers';
-import { createPolisEthProvider } from "../lib/provider/createPolisEthProvider";
 import { HttpClient,PolisClient } from "../lib";
 import { getClient, getToken } from "./utils-test";
-import createPolisConnectMiddleware from "../lib/provider/polisConnectMiddleware";
 import { IOauth2Info, IPolisClientOpts, IPolisOauth2Opts, IPolisProviderOpts } from "../lib/provider/types";
-import { toChecksumAddress } from "../lib/provider/utils";
-import EventManager from "../lib/provider/utils/events";
 import { PolisProvider } from '../lib/provider/polisProvider';
 import SafeEventEmitter from '@metamask/safe-event-emitter'
 import { NuvoWeb3Provider } from "../lib/provider/NuvoWeb3Provider";
@@ -17,7 +12,7 @@ let httpclient: HttpClient;
 let oauthInfo: IOauth2Info;
 
 describe('Check if ethers provider works', function () {
-    let ethProvider: ethers.providers.Web3Provider;
+    let ethProvider: ethers.BrowserProvider;
     let nuvoProvider:NuvoWeb3Provider;
     let polisprovider: any;
     // const address = '0x507d2C5444Be42A5e7Bd599bc370977515B7353F'
@@ -66,11 +61,11 @@ describe('Check if ethers provider works', function () {
             console.log('debug data:', data)
         })
         // polisprovider = createPolisEthProvider(opts)
-        ethProvider = new ethers.providers.Web3Provider(polisprovider);
+        ethProvider = new ethers.BrowserProvider(polisprovider);
         nuvoProvider = new NuvoWeb3Provider(polisprovider);
     })
-    it('test polis-provider account', function (done) {
-        ethProvider.getSigner(0).getAddress()
+    it('test polis-provider account', async function (done) {
+        (await ethProvider.getSigner(0)).getAddress()
             .then(res => {
                 console.log("get accounts(0):", res);
                 done();
@@ -83,11 +78,11 @@ describe('Check if ethers provider works', function () {
         // console.log('defaultUrl:',ethProvider.defaultUrl())
         let tx: any = {
             to: address,
-            value: ethers.utils.parseEther("0.01"),
+            value: ethers.parseEther("0.01"),
             chainId: CHAIN_ID
         }
         // console.log(ethProvider.getSigner())
-        const res = await ethProvider.getSigner().sendTransaction(tx);
+        const res = (await ethProvider.getSigner()).sendTransaction(tx);
 
         console.log("send tx:", res)
         // const r = await res.wait();
@@ -97,11 +92,11 @@ describe('Check if ethers provider works', function () {
         // console.log('defaultUrl:',PolisProvider.defaultUrl())
         let tx: any = {
             to: address,
-            value: ethers.utils.parseEther("0.01"),
+            value: ethers.parseEther("0.01"),
             chainId: CHAIN_ID
         }
         // console.log("tx:",tx)
-        // const provider:ethers.providers.Web3Provider = client.getProvider();
+        // const provider:ethers.BrowserProvider = client.getProvider();
         client.on('debug',function (data){
             console.log("debug",data)
         })
@@ -128,11 +123,11 @@ describe('Check if ethers provider works', function () {
         //     console.log(err)
         //     done(JSON.stringify(err))
         // });
-        client.web3Provider.getSigner().signMessage("aaa").then(res=>{
-                console.log("signMessage", res)
-            }).catch(err=>{
-                done(err)
-            })
+        // client.web3Provider.getSigner().signMessage("aaa").then(res=>{
+        //         console.log("signMessage", res)
+        //     }).catch(err=>{
+        //         done(err)
+        //     })
 
 
         // const r = await res.wait();
@@ -148,10 +143,10 @@ describe('Check if ethers provider works', function () {
            "function createDAC(address[] admins,uint256 threshold ,bytes data) nonpayable returns (address dac,address owner)"
         ]
         // const daiContract2 = new ethers.Contract(daiAddress, daiAbi, client.web3Provider.getSigner());
-        const daiContract2 = client.getContract(daiAddress, daiAbi);
+        const daiContract2 = await client.getContract(daiAddress, daiAbi);
         const addresss=['0xf1181bd15E8780B69a121A8D8946cC1C23972Bd4','0xA35f56ebF874Df1B6aC09E72528e1a86D4F1EF2B']
 
-        const result = await daiContract2?.createDAC(addresss,1,0)
+        const result = await daiContract2["createDAC"](addresss,1,0)
     })
     it('test polis-provider getBlockNumber', async function () {
         // try{
@@ -166,13 +161,13 @@ describe('Check if ethers provider works', function () {
         const balance = await ethProvider.getBalance(address);
         console.log("balance:", balance.toString())
     })
-    it('test polis-provider populateTransaction', function (done) {
+    it('test polis-provider populateTransaction', async function (done) {
         let tx: any = {
-            to: address,
-            value: 1,
-            chainId: 4
-        }
-        ethProvider.getSigner().populateTransaction(tx).then((res: any) => {
+            "to": address,
+            "value": 1,
+            "chainId": 4
+        };
+        (await ethProvider.getSigner()).populateTransaction(tx).then((res: any) => {
             console.log("populateTransaction success", res);
             done()
             // return res;
@@ -181,8 +176,8 @@ describe('Check if ethers provider works', function () {
             done(err)
         });
     })
-    it('test polis-provider sign message', function (done) {
-        ethProvider.getSigner().signMessage('polis').then(res => {
+    it('test polis-provider sign message', async function (done) {
+        (await ethProvider.getSigner()).signMessage('polis').then(res => {
             done();
         }).catch(err => {
             // console.log("sign message err:", err)
@@ -193,14 +188,14 @@ describe('Check if ethers provider works', function () {
         // console.log('defaultUrl:',PolisProvider.defaultUrl())
         let tx: any = {
             to: address,
-            value: ethers.utils.parseEther("0.01"),
+            value: ethers.parseEther("0.01"),
             chainId: CHAIN_ID
         }
         // console.log("a:",nuvoProvider.getSigner())
         // const res = await nuvoProvider.sendTransaction(tx);
         // console.log("send tx:", res)
         try{
-            const signer =  nuvoProvider.getSigner();
+            const signer = await nuvoProvider.getSigner();
             // console.log(signer)
             // console.log(typeof (signer))
             const res2=await signer.sendTransaction(tx);

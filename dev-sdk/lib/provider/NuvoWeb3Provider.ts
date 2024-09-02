@@ -1,214 +1,215 @@
-import { ethers } from "ethers";
-import { Signer, TypedDataDomain, TypedDataField, TypedDataSigner } from "@ethersproject/abstract-signer";
+import {
+    defineProperties,
+    Eip1193Provider,
+    ethers,
+    JsonRpcApiProvider, Networkish,
+    Provider,
+    TransactionRequest,
+    TransactionResponse
+} from "ethers";
 
-import {Provider,TransactionResponse,TransactionRequest } from "@ethersproject/abstract-provider"
-import { checkProperties, deepCopy, Deferrable, defineReadOnly, getStatic, resolveProperties, shallowCopy } from "@ethersproject/properties";
-import { _TypedDataEncoder } from "@ethersproject/hash";
-import { Bytes, hexlify, hexValue, isHexString } from "@ethersproject/bytes";
-import { ConnectionInfo, fetchJson, poll } from "@ethersproject/web";
-
-import { Logger } from "@ethersproject/logger";
-import { version } from "../_version";
 import { TX_TYPE, WALLET_TYPES } from "./utils";
 import log from "./utils/log";
+import {JsonRpcSigner} from "ethers/lib.commonjs/providers/provider-jsonrpc";
+import {Signer} from "ethers/lib.commonjs/providers/signer";
+import { getAddress, resolveAddress } from "ethers/lib.commonjs/address/index.js";
+import type { TransactionLike } from "ethers/lib.commonjs/transaction/index.js";
+import type { TypedDataDomain, TypedDataField } from "ethers/lib.commonjs/hash/index.js";
+import { TypedDataEncoder } from "ethers/lib.commonjs/hash/index.js";
+import {
+    getBigInt, hexlify, isHexString, toQuantity, toUtf8Bytes,
+    isError, makeError, assert, assertArgument,
+    FetchRequest, resolveProperties
+} from "ethers/lib.commonjs/utils/index.js";
+import {PolisProvider} from "./polisProvider";
 
 const errorGas = [ "call", "estimateGas" ];
+const Primitive = "bigint,boolean,function,number,string,symbol".split(/,/g);
 
-const logger = new Logger(version);
-
-const _constructorGuard = {};
-
-function checkError(method: string, error: any, params: any): any {
-    // Undo the "convenience" some nodes are attempting to prevent backwards
-    // incompatibility; maybe for v6 consider forwarding reverts as errors
-    if (method === "call" && error.code === Logger.errors.SERVER_ERROR) {
-        const e = error.error;
-        if (e && e.message.match("reverted") && isHexString(e.data)) {
-            return e.data;
-        }
-
-        logger.throwError("missing revert data in call exception", Logger.errors.CALL_EXCEPTION, {
-            error, data: "0x"
-        });
+function deepCopy<T = any>(value: T): T {
+    if (value == null || Primitive.indexOf(typeof(value)) >= 0) {
+        return value;
     }
 
-    let message = error.message;
-    if (error.code === Logger.errors.SERVER_ERROR && error.error && typeof(error.error.message) === "string") {
-        message = error.error.message;
-    } else if (typeof(error.body) === "string") {
-        message = error.body;
-    } else if (typeof(error.responseText) === "string") {
-        message = error.responseText;
-    }
-    message = (message || "").toLowerCase();
-
-    const transaction = params.transaction || params.signedTransaction;
-
-    // "insufficient funds for gas * price + value + cost(data)"
-    if (message.match(/insufficient funds|base fee exceeds gas limit/)) {
-        logger.throwError("insufficient funds for intrinsic transaction cost", Logger.errors.INSUFFICIENT_FUNDS, {
-            error, method, transaction
-        });
+    // Keep any Addressable
+    if (typeof((<any>value).getAddress) === "function") {
+        return value;
     }
 
-    // "nonce too low"
-    if (message.match(/nonce too low/)) {
-        logger.throwError("nonce has already been used", Logger.errors.NONCE_EXPIRED, {
-            error, method, transaction
-        });
+    if (Array.isArray(value)) { return <any>(value.map(deepCopy)); }
+
+    if (typeof(value) === "object") {
+        return Object.keys(value).reduce((accum, key) => {
+            accum[key] = (<any>value)[key];
+            return accum;
+        }, <any>{ });
     }
 
-    // "replacement transaction underpriced"
-    if (message.match(/replacement transaction underpriced/)) {
-        logger.throwError("replacement fee too low", Logger.errors.REPLACEMENT_UNDERPRICED, {
-            error, method, transaction
-        });
-    }
-
-    // "replacement transaction underpriced"
-    if (message.match(/only replay-protected/)) {
-        logger.throwError("legacy pre-eip-155 transactions not supported", Logger.errors.UNSUPPORTED_OPERATION, {
-            error, method, transaction
-        });
-    }
-
-    if (errorGas.indexOf(method) >= 0 && message.match(/gas required exceeds allowance|always failing transaction|execution reverted/)) {
-        logger.throwError("cannot estimate gas; transaction may fail or may require manual gas limit", Logger.errors.UNPREDICTABLE_GAS_LIMIT, {
-            error, method, transaction
-        });
-    }
-
-    throw error;
+    throw new Error(`should not happen: ${ value } (${ typeof(value) })`);
 }
 
-
-export class NuvoWeb3Provider extends  ethers.providers.Web3Provider {
-
-    async sendTransaction(signedTransaction: string | Promise<string>): Promise<TransactionResponse> {
-
-        return super.sendTransaction(signedTransaction)
-    }
-
-    getSigner(addressOrIndex?: string | number):ethers.providers.JsonRpcSigner {
-        return new NuvoSinger(_constructorGuard, this, addressOrIndex) as ethers.providers.JsonRpcSigner;
+function* incrementSequence(start = 0) {
+    let count = start;
+    while (true) {
+        yield count++;
     }
 }
 
-export class NuvoSinger  extends Signer implements TypedDataSigner {
+export class NuvoWeb3Provider extends  ethers.BrowserProvider {
 
-    // @ts-ignore
-    readonly provider: ethers.providers.JsonRpcProvider ;
-    _index: number;
-    _address: string;
+    polisProvider: PolisProvider;
 
-    constructor(constructorGuard: any, provider: NuvoWeb3Provider, addressOrIndex?: string | number) {
-        logger.checkNew(new.target, ethers.providers.JsonRpcProvider);
-
-        super();
-
-        if (constructorGuard !== _constructorGuard) {
-            throw new Error("do not call the JsonRpcSigner constructor directly; use provider.getSigner");
+    constructor(ethereum: Eip1193Provider,network?: Networkish) {
+        super(ethereum, network);
+        if(ethereum instanceof PolisProvider){
+            this.polisProvider = ethereum;
         }
-
-        defineReadOnly(this, "provider", provider);
-
-        if (addressOrIndex == null) { addressOrIndex = 0; }
-
-        if (typeof(addressOrIndex) === "string") {
-            defineReadOnly(this, "_address", this.provider.formatter.address(addressOrIndex));
-            defineReadOnly(this, "_index", null);
-
-        } else if (typeof(addressOrIndex) === "number") {
-            defineReadOnly(this, "_index", addressOrIndex);
-            defineReadOnly(this, "_address", null);
-
-        } else {
-            logger.throwArgumentError("invalid address or index", "addressOrIndex", addressOrIndex);
-        }
-    }
-
-    connect(provider: Provider): NuvoSinger {
-        return logger.throwError("cannot alter JSON-RPC Signer connection", Logger.errors.UNSUPPORTED_OPERATION, {
-            operation: "connect"
-        });
-    }
-
-    getAddress(): Promise<string> {
-        if (this._address) {
-            return Promise.resolve(this._address);
-        }
-
-        return this.provider.send("eth_accounts", []).then((accounts) => {
-            if (accounts.length <= this._index) {
-                logger.throwError("unknown account #" + this._index, Logger.errors.UNSUPPORTED_OPERATION, {
-                    operation: "getAddress"
-                });
+        this.#request = async (method: string, params: Array<any> | Record<string, any>) => {
+            const payload = { method, params };
+            this.emit("debug", { action: "sendEip1193Request", payload });
+            try {
+                const result = await ethereum.request(payload);
+                this.emit("debug", { action: "receiveEip1193Result", result });
+                return result;
+            } catch (e: any) {
+                const error = new Error(e.message);
+                (<any>error).code = e.code;
+                (<any>error).data = e.data;
+                (<any>error).payload = payload;
+                this.emit("debug", { action: "receiveEip1193Error", error });
+                throw error;
             }
-            return this.provider.formatter.address(accounts[this._index])
+        };
+    }
+
+    #request: (method: string, params: Array<any> | Record<string, any>) => Promise<any>;
+
+    async getSigner(address?: number | string): Promise<NuvoSinger> {
+        // getSigner(addressOrIndex?: string | number):ethers.JsonRpcSigner {
+        // return new NuvoSinger(this, address);
+        if (address == null) { address = 0; }
+
+        if (!(await this.hasSigner(address))) {
+            try {
+                //const resp =
+                await this.#request("eth_requestAccounts", [ ]);
+
+            } catch (error: any) {
+                const payload = error.payload;
+                throw this.getRpcError(payload, { id: payload.id, error });
+            }
+        }
+        if (address == null) { address = 0; }
+
+        const accountsPromise = this.send("eth_accounts", [ ]);
+
+        // Account index
+        if (typeof(address) === "number") {
+            const accounts = <Array<string>>(await accountsPromise);
+            if (address >= accounts.length) { throw new Error("no such account"); }
+            return new NuvoSinger(this, accounts[address]);
+        }
+
+        const { accounts } = await resolveProperties({
+            network: this.getNetwork(),
+            accounts: accountsPromise
+        });
+
+        // Account address
+        address = getAddress(address);
+        for (const account of accounts) {
+            if (getAddress(account) === address) {
+                return new NuvoSinger(this, address);
+            }
+        }
+        // return await super.getSigner(address);
+        return new NuvoSinger(this, address);
+    }
+}
+
+export class NuvoSinger  extends JsonRpcSigner {
+
+    requestCount = incrementSequence(1);
+
+    constructor(provider: JsonRpcApiProvider, address: string) {
+
+        super(provider,address);
+        address = getAddress(address);
+        defineProperties<JsonRpcSigner>(this, { address });
+    }
+
+    polisProvider(): PolisProvider {
+        if(this.provider instanceof NuvoWeb3Provider) {
+            const nuvoWeb3Provider = this.provider as NuvoWeb3Provider;
+            const polisProvider = nuvoWeb3Provider.polisProvider;
+            return polisProvider;
+        }else{
+            throw new Error('Provider is not an instance of NuvoProvider');
+        }
+    }
+
+    connect(provider: null | Provider): Signer {
+        assert(false, "cannot reconnect JsonRpcSigner", "UNSUPPORTED_OPERATION", {
+            operation: "signer.connect"
         });
     }
 
-    sendUncheckedTransaction(transaction: Deferrable<TransactionRequest>): Promise<string> {
-        transaction = shallowCopy(transaction);
+    async getAddress(): Promise<string> {
+        return this.address;
+    }
 
-        const fromAddress = this.getAddress().then((address) => {
-            if (address) { address = address.toLowerCase(); }
-            return address;
-        });
+    // JSON-RPC will automatially fill in nonce, etc. so we just check from
+    async populateTransaction(tx: TransactionRequest): Promise<TransactionLike<string>> {
+        return await this.populateCall(tx);
+    }
+
+    // Returns just the hash of the transaction after sent, which is what
+    // the bare JSON-RPC API does;
+    async sendUncheckedTransaction(_tx: TransactionRequest): Promise<string> {
+        const tx = deepCopy(_tx);
+
+        const promises: Array<Promise<void>> = [];
+
+        // Make sure the from matches the sender
+        if (tx.from) {
+            const _from = tx.from;
+            promises.push((async () => {
+                const from = await resolveAddress(_from, this.provider);
+                assertArgument(from != null && from.toLowerCase() === this.address.toLowerCase(),
+                    "from address mismatch", "transaction", _tx);
+                tx.from = from;
+            })());
+        } else {
+            tx.from = this.address;
+        }
 
         // The JSON-RPC for eth_sendTransaction uses 90000 gas; if the user
         // wishes to use this, it is easy to specify explicitly, otherwise
         // we look it up for them.
-        if (transaction.gasLimit == null) {
-            const estimate = shallowCopy(transaction);
-            estimate.from = fromAddress;
-            transaction.gasLimit = this.provider.estimateGas(estimate);
+        if (tx.gasLimit == null) {
+            promises.push((async () => {
+                tx.gasLimit = await this.provider.estimateGas({ ...tx, from: this.address});
+            })());
         }
 
-        if (transaction.to != null) {
-            transaction.to = Promise.resolve(transaction.to).then(async (to) => {
-                if (to == null) { return null; }
-                const address = await this.provider.resolveName(to);
-                if (address == null) {
-                    logger.throwArgumentError("provided ENS name resolves to null", "tx.to", to);
-                }
-                return address;
-            });
+        // The address may be an ENS name or Addressable
+        if (tx.to != null) {
+            const _to = tx.to;
+            promises.push((async () => {
+                tx.to = await resolveAddress(_to, this.provider);
+            })());
         }
 
-        return resolveProperties({
-            tx: resolveProperties(transaction),
-            sender: fromAddress
-        }).then(({ tx, sender }) => {
+        // Wait until all of our properties are filled in
+        if (promises.length) { await Promise.all(promises); }
 
-            if (tx.from != null) {
-                if (tx.from.toLowerCase() !== sender) {
-                    logger.throwArgumentError("from address mismatch", "transaction", transaction);
-                }
-            } else {
-                tx.from = sender;
-            }
+        const hexTx = this.provider.getRpcTransaction(tx);
 
-            const hexTx = (<any>this.provider.constructor).hexlifyTransaction(tx, { from: true });
-
-            return this.provider.send("eth_sendTransaction", [ hexTx ]).then((hash) => {
-                return hash;
-            }, (error) => {
-                checkError("sendTransaction", error, hexTx);
-            });
-        });
+        return this.provider.send("eth_sendTransaction", [ hexTx ]);
     }
 
-    signTransaction(transaction: Deferrable<TransactionRequest>): Promise<string> {
-        return logger.throwError("signing transactions is unsupported", Logger.errors.UNSUPPORTED_OPERATION, {
-            operation: "signTransaction"
-        });
-    }
-
-    async sendTransaction(transaction: Deferrable<TransactionRequest>): Promise<TransactionResponse> {
-        // @ts-ignore
-        const polisProvider = this.provider.provider;
-
+    async sendTransaction(tx: TransactionRequest): Promise<TransactionResponse> {
+        const polisProvider = this.polisProvider();
         const walletType = polisProvider.walletType;
         if(!walletType){
             const address = await this.getAddress();
@@ -216,94 +217,131 @@ export class NuvoSinger  extends Signer implements TypedDataSigner {
         let hash = "";
         let res:any = {}
         let req = {
-            id:999,
+            id:this.requestCount.next().value,
             'jsonrpc': '2.0',
             method: "eth_sendTransaction",
-            params: [transaction]
+            params: [tx]
         }
-
+        // alert(req);
         await polisProvider.confirmTrans(req,res);
         if(res.error){
             throw res.error;
         }
         hash = res.result;
-        // switch (walletType) {
-        //     case WALLET_TYPES.MM:
-        //         let res:any = {}
-        //         let req = {
-        //             id:999,
-        //             'jsonrpc': '2.0',
-        //             method: "eth_sendTransaction",
-        //             params: [transaction]
-        //         }
-        //
-        //         await polisProvider.confirmTrans(req,res);
-        //         if(res.error){
-        //             throw res.error;
-        //         }
-        //         hash = res.result;
-        //         break
-        //     default:
-        //         // Send the transaction
-        //         hash = await this.sendUncheckedTransaction(transaction);
-        // }
-        if(hash){
-            // This cannot be mined any earlier than any recent block
-            const blockNumber = await this.provider._getInternalBlockNumber(100 + 2 * this.provider.pollingInterval);
 
-            try {
-                // Unfortunately, JSON-RPC only provides and opaque transaction hash
-                // for a response, and we need the actual transaction, so we poll
-                // for it; it should show up very quickly
-                return await poll(async () => {
+        // This cannot be mined any earlier than any recent block
+        const blockNumber = await this.provider.getBlockNumber();
+        //
+        // // Send the transaction
+        // const hash = await this.sendUncheckedTransaction(tx);
+
+        // Unfortunately, JSON-RPC only provides and opaque transaction hash
+        // for a response, and we need the actual transaction, so we poll
+        // for it; it should show up very quickly
+        return await (new Promise((resolve, reject) => {
+            const timeouts = [ 1000, 100 ];
+            let invalids = 0;
+
+            const checkTx = async () => {
+
+                try {
+                    // Try getting the transaction
                     const tx = await this.provider.getTransaction(hash);
-                    if (tx === null) { return undefined; }
-                    return this.provider._wrapTransaction(tx, hash, blockNumber);
-                }, { oncePoll: this.provider });
-            } catch (error) {
-                (<any>error).transactionHash = hash;
-                throw error;
-            }
+
+                    if (tx != null) {
+                        resolve(tx.replaceableTransaction(blockNumber));
+                        return;
+                    }
+
+                } catch (error) {
+
+                    // If we were cancelled: stop polling.
+                    // If the data is bad: the node returns bad transactions
+                    // If the network changed: calling again will also fail
+                    // If unsupported: likely destroyed
+                    if (isError(error, "CANCELLED") || isError(error, "BAD_DATA") ||
+                        isError(error, "NETWORK_ERROR") || isError(error, "UNSUPPORTED_OPERATION")) {
+
+                        if (error.info == null) { error.info = { }; }
+                        error.info.sendTransactionHash = hash;
+
+                        reject(error);
+                        return;
+                    }
+
+                    // Stop-gap for misbehaving backends; see #4513
+                    if (isError(error, "INVALID_ARGUMENT")) {
+                        invalids++;
+                        if (error.info == null) { error.info = { }; }
+                        error.info.sendTransactionHash = hash;
+                        if (invalids > 10) {
+                            reject(error);
+                            return;
+                        }
+                    }
+
+                    // Notify anyone that cares; but we will try again, since
+                    // it is likely an intermittent service error
+                    this.provider.emit("error", makeError("failed to fetch transation after sending (will try again)", "UNKNOWN_ERROR", { error }));
+                }
+
+                // Wait another 4 seconds
+                this.provider._setTimeout(() => { checkTx(); }, timeouts.pop() || 4000);
+            };
+            checkTx();
+        }));
+    }
+
+    async signTransaction(_tx: TransactionRequest): Promise<string> {
+        const tx = deepCopy(_tx);
+
+        // Make sure the from matches the sender
+        if (tx.from) {
+            const from = await resolveAddress(tx.from, this.provider);
+            assertArgument(from != null && from.toLowerCase() === this.address.toLowerCase(),
+                "from address mismatch", "transaction", _tx);
+            tx.from = from;
+        } else {
+            tx.from = this.address;
         }
 
+        const hexTx = this.provider.getRpcTransaction(tx);
+        return await this.provider.send("eth_signTransaction", [ hexTx ]);
     }
 
-    async signMessage(message: Bytes | string): Promise<string> {
-        const data = ((typeof(message) === "string") ? ethers.utils.toUtf8Bytes(message): message);
-        const address = await this.getAddress();
 
-        return await this.provider.send("personal_sign", [ hexlify(data), address.toLowerCase() ]);
-
+    async signMessage(_message: string | Uint8Array): Promise<string> {
+        const message = ((typeof(_message) === "string") ? toUtf8Bytes(_message): _message);
+        return await this.provider.send("personal_sign", [
+            hexlify(message), this.address.toLowerCase() ]);
     }
 
-    async _legacySignMessage(message: Bytes | string): Promise<string> {
-        const data = ((typeof(message) === "string") ? ethers.utils.toUtf8Bytes(message): message);
-        const address = await this.getAddress();
+    async signTypedData(domain: TypedDataDomain, types: Record<string, Array<TypedDataField>>, _value: Record<string, any>): Promise<string> {
+        const value = deepCopy(_value);
 
-        // https://github.com/ethereum/wiki/wiki/JSON-RPC#eth_sign
-        return await this.provider.send("eth_sign", [ address.toLowerCase(), hexlify(data) ]);
-    }
-
-    async _signTypedData(domain: TypedDataDomain, types: Record<string, Array<TypedDataField>>, value: Record<string, any>): Promise<string> {
         // Populate any ENS names (in-place)
-        const populated = await _TypedDataEncoder.resolveNames(domain, types, value, (name: string) => {
-            return this.provider.resolveName(name);
+        const populated = await TypedDataEncoder.resolveNames(domain, types, value, async (value: string) => {
+            const address = await resolveAddress(value);
+            assertArgument(address != null, "TypedData does not support null address", "value", value);
+            return address;
         });
 
-        const address = await this.getAddress();
-
         return await this.provider.send("eth_signTypedData_v4", [
-            address.toLowerCase(),
-            JSON.stringify(_TypedDataEncoder.getPayload(populated.domain, types, populated.value))
+            this.address.toLowerCase(),
+            JSON.stringify(TypedDataEncoder.getPayload(populated.domain, types, populated.value))
         ]);
     }
 
     async unlock(password: string): Promise<boolean> {
-        const provider = this.provider;
+        return this.provider.send("personal_unlockAccount", [
+            this.address.toLowerCase(), password, null ]);
+    }
 
-        const address = await this.getAddress();
-
-        return provider.send("personal_unlockAccount", [ address.toLowerCase(), password, null ]);
+    // https://github.com/ethereum/wiki/wiki/JSON-RPC#eth_sign
+    async _legacySignMessage(_message: string | Uint8Array): Promise<string> {
+        const message = ((typeof(_message) === "string") ? toUtf8Bytes(_message): _message);
+        return await this.provider.send("eth_sign", [
+            this.address.toLowerCase(), hexlify(message) ]);
     }
 
 }

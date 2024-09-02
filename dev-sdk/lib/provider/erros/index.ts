@@ -68,7 +68,7 @@ export const sdkErrors = {
     MM_SWITCH_CHAIN_CANCEL:error(-90004,'Metamask:user cancel switching network'),
     MM_ACCOUNT_NOT_MATCH:error(-90005,'Metamask address does not match Polis address.'),
     MM_ACCOUNT_LOGOUT_ERROR:error(-90006,'Metamask logout failed.'),
-    MM_SWITCH_CANCEL_CONNECT:error(-90006,'Metamask:User rejected the connect request.'),
+    MM_SWITCH_CANCEL_CONNECT:error(-90015,'Metamask:User rejected the connect request.'),
     NO_PERMISSION:error(-90007,'Please login or authorize.'),
     NETWORK_ERROR:error(-90009,'network error.'),
     MM_NOT_INSTALL:error(-90010,'Metamask not install.'),
@@ -76,7 +76,8 @@ export const sdkErrors = {
     USER_SEND_TX_CANCEL:error(-90012,'User cancel the transaction.'),
     POLIS_TX_ERROR:error(-90013,'Send transaction error.'),
     UNKNOW_ERROR:error(-90014,'unknow error.'),
-    
+    LOGOUT_ERROR:error(-90016,'logout error.'),
+
     
     WALLET_CONNECT_NOT_LOGIN:error(-90040,'wallectconnect not logged in.'),
     WC_ERROR:error(-90041,'WallectConnect execution error.'),

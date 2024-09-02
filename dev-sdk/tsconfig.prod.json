@@ -4,13 +4,13 @@
     "outDir": "./dist",
     "removeComments": true,
     "sourceMap": false,
-    "declaration": true
+    "declaration": true,
   },
   "include": [
     "./lib"
   ],
   "exclude": [
     "./test",
-    "node_modules"
+    "node_modules",
   ],
 }

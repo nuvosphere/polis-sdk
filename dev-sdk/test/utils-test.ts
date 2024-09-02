@@ -27,7 +27,7 @@ export async function getToken(){
         app_id: appId,
         return_url: return_url,
     };
-    console.log('request code data:',data);
+    // console.log('request code data:',data);
     // get code
     const resCode:any = await axios.post(`${apiHost}/api/v1/oauth2/get_code`, data, { headers });
     if (resCode.status === 200 && resCode.data.code === 200) {
@@ -35,7 +35,7 @@ export async function getToken(){
         // console.log(resToken)
         if (resToken.status === 200 && resToken.data.code === 200) {
             oauthIfno = resToken.data.data;
-            console.log('get token:', oauthIfno.accessToken);
+            // console.log('get token:', oauthIfno.accessToken);
         }else {
             throw `get token err:${resToken.data.msg}`;
         }

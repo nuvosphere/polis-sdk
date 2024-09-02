@@ -1,16 +1,25 @@
-import MetaMaskOnboarding from '@metamask/onboarding';
-import {ethers, toBeHex} from 'ethers';
+import { ethers } from 'ethers';
 import Swal from 'sweetalert2';
 import errors, { toError } from './erros';
 import log from "./utils/log"
-import { TX_TYPE } from "./utils";
+import {TX_TYPE, WALLET_TYPES} from "./utils";
+import html = Mocha.reporters.html;
 
-const meta_storage_key = 'meta_address';
-const chainIds = [1, 4, 435, 1337];
+const meta_storage_key = 'provider_address';
+const chainIds = [1, 4,1088,59902, 435, 1337];
 
 let isConnectedMetaMask: boolean = false;
 let metaMaskNetworkStatus: boolean = false;
 let env: string = 'prod';
+// tslint:disable-next-line:prefer-const
+let changedEventCall: any;
+
+function getProvider(providerType:string=WALLET_TYPES.BITGET){
+    if(providerType == WALLET_TYPES.BITGET)
+        return  window.bitkeep.ethereum
+    else
+        return  window.ethereum;
+}
 
 function convert16(num: any) {
     // return '0x' + num.toString(16);
@@ -18,8 +27,15 @@ function convert16(num: any) {
     // return ethers.hexValue(num);
 }
 
-
-function error2(msg: string, iconStr: any = 'error') {
+// success,error,warning,info,question
+const MsgICON = {
+    success:"success",
+    error: "error",
+    warning: "warning",
+    info: "info",
+    question:"question"
+}
+function showMsg(msg: string,html:string, iconStr: any = MsgICON.error) {
     const toast = Swal.mixin({
         toast: true,
         position: 'top-end',
@@ -34,20 +50,21 @@ function error2(msg: string, iconStr: any = 'error') {
 
     toast.fire({
         icon: iconStr,
-        title: msg || 'Some errors occured',
+        title: msg ,
+        html: html
     });
 }
 
 // get current chain id
 export async function getCurChainId() {
-    return await window.ethereum.request({method: 'eth_chainId'});
+    return await getProvider().request({method: 'eth_chainId'});
 }
 
-// add chain to metamask
+// add chain to Wallet
 async function addChain(chainid: number, chain: any):Promise<any> {
     try {
         const ethChain = convert16(chainid);  //'0x' + chainid.toString(16);
-        await window.ethereum.request({
+        await getProvider().request({
             method: 'wallet_addEthereumChain',
             params: [{
                 chainId: ethChain, chainName: chain.name,
@@ -61,7 +78,7 @@ async function addChain(chainid: number, chain: any):Promise<any> {
         });
         return true;
     } catch (addError: any) {
-        // "MetaMask Connect Error,Please try again.",
+        // "Wallet Connect Error,Please try again.",
         return Promise.reject(toError(errors.MM_ERROR,addError.message));
     }
     return false;
@@ -71,13 +88,13 @@ export async function changeChain(chainid: number, chain: any) {
     // let chainid: number = 1337;
     const eth_chainid = "0x" + chainid.toString(16);
     try {
-        await window.ethereum.request({
+        await getProvider().request({
             method: 'wallet_switchEthereumChain',
             params: [{chainId: eth_chainid}],
         });
         return true;
     } catch (switchError: any) {
-        // This error code indicates that the chain has not been added to MetaMask.
+        // This error code indicates that the chain has not been added to Wallet.
         if (switchError.code === 4902 && chain != null) {
             const addRes = await addChain(chainid, chain);
             return addRes;
@@ -86,10 +103,7 @@ export async function changeChain(chainid: number, chain: any) {
     return false;
 }
 
-// tslint:disable-next-line:prefer-const
-let changedEventCall: any;
-
-export function addMetamaskEventCallback(eventName: string, callback: any) {
+export function addWalletEventCallback(eventName: string, callback: any) {
     if (!changedEventCall) {
         changedEventCall = Object.create(null);
     }
@@ -104,14 +118,13 @@ export function addMetamaskEventCallback(eventName: string, callback: any) {
 
 export async function getMetaAccounts() {
     let metamaskAddress = '';
-    if (!MetaMaskOnboarding.isMetaMaskInstalled()) {
+    if (!checkInstall()) {
         return Promise.reject(toError(errors.MM_ERROR,'MetaMask Not Install.'));
-        const onboarding = new MetaMaskOnboarding();
-        onboarding.stopOnboarding();
+
     } else {
         try {
             // when change chain
-            window.ethereum.on('chainChanged', (chainId: any) => {
+            getProvider().on('chainChanged', (chainId: any) => {
                 // tslint:disable-next-line:radix
                 const chainNum: any = window.parseInt(parseInt(chainId), 10);
                 localStorage.setItem('metachain', chainNum);
@@ -123,7 +136,7 @@ export async function getMetaAccounts() {
                 }
             });
             // modify meta accou t
-            window.ethereum.on('accountsChanged', (accounts: any) => {
+            getProvider().on('accountsChanged', (accounts: any) => {
                 if (accounts.length > 0) {
                     metamaskAddress = accounts[0];
                     localStorage.setItem('meta_address', metamaskAddress);
@@ -135,7 +148,7 @@ export async function getMetaAccounts() {
                 }
             });
 
-            const accounts = await window.ethereum.request({
+            const accounts = await getProvider().request({
                 method: 'eth_requestAccounts',
             });
             // this.metaConnectStatus = accounts && accounts.length > 0;
@@ -146,7 +159,7 @@ export async function getMetaAccounts() {
             }
         } catch (e: any) {
             if (e.code === -32002) {
-                return Promise.reject(toError(errors.MM_ERROR,'Already processing connecting metamask. Please open or unlock Metamask .'));
+                return Promise.reject(toError(errors.MM_ERROR,'Already processing connecting wallet. Please open or unlock wallet .'));
             }
             else if (e.code === 4001) {
                 return Promise.reject(errors.MM_SWITCH_CANCEL_CONNECT);
@@ -196,7 +209,7 @@ export async function getMetaAccounts() {
     "nonce": 14,
     "data":"0xa9059cbb000000000000000000000000f1181bd15e8780b69a121a8d8946cc1c23
  */
-export async function sendMetaMaskContractTx(trans: any, chain: any) {
+export async function sendContractTx(trans: any, chain: any) {
 
     // return await this._sendMetaMaskTx(trans);
     const fromAddrees = trans.eth_address;
@@ -225,13 +238,13 @@ export async function sendMetaMaskContractTx(trans: any, chain: any) {
     }
 
     try {
-        const provider = new ethers.BrowserProvider(window.ethereum);
+        const provider = new ethers.BrowserProvider(getProvider());
         const signer = await provider.getSigner(trans.eth_address);
         const daiAddress = trans.contract_address;
         const daiAbi = [trans.func_abi_sign];
         // const daiAbi = ["function transfer(address to, uint amount)"];
         const contract = new ethers.Contract(daiAddress, daiAbi, signer);
-        // const daiWithSigner = contract.connect(signer);
+        // const daiWithSigner:ethers.BaseContract = contract.connect(signer);
         // const txHash = await  contract[trans.function](trans.args);
         const overrides = {
             value: trans.value,
@@ -269,7 +282,7 @@ export async function sendMetaMaskContractTx(trans: any, chain: any) {
     }
 }
 
-async function sendMetaMaskTrans(tx: {to: any,
+async function sendTrans(tx: {to: any,
     from: any,
     value: any,
     chainId: number,
@@ -289,7 +302,7 @@ async function sendMetaMaskTrans(tx: {to: any,
         from_addr.toLocaleLowerCase() !=
         meta_addr.toLocaleLowerCase().replaceAll('"', "")
     ) {
-        return Promise.reject(toError(errors.MM_ACCOUNT_NOT_MATCH,`Invalid MetaMask address, it should be: ${from_addr}`))
+        return Promise.reject(toError(errors.MM_ACCOUNT_NOT_MATCH,`Invalid Wallet address, it should be: ${from_addr}`))
     }
     //3.check network
     isok = await changeChain(tx.chainId, chain);
@@ -297,23 +310,24 @@ async function sendMetaMaskTrans(tx: {to: any,
         return;
     }
     try {
-        const provider = new ethers.BrowserProvider(window.ethereum);
+        const provider = new ethers.BrowserProvider(getProvider());
         const signer = await provider.getSigner(from_addr);
         if(!tx.data && tx.data.length<=0){
             tx.data = "0x";
         }
         const transactionParameters = {
-            nonce: tx.nonce, // ignored by MetaMask
-            gasPrice: convert16(tx.gasPrice), // customizable by user during MetaMask confirmation.
-            gasLimit: convert16(tx.gas), // customizable by user during MetaMask confirmation.
+            nonce: tx.nonce, // ignored by Wallet
+            gasPrice: convert16(tx.gasPrice), // customizable by user during Wallet confirmation.
+            gasLimit: convert16(tx.gas), // customizable by user during Wallet confirmation.
             to: tx.to, // Required except during contract publications.
             from: tx.from, // must  match user's active address.
             value: convert16(tx.value), // Only required to send ether to the recipient from the initiating external account.
             data: tx.data, // Optional, but used for defining smart contract creation and interaction.
-            chainId: tx.chainId // Used to prevent transaction reuse across blockchains. Auto-filled by MetaMask.
+            chainId: tx.chainId // U
+            // sed to prevent transaction reuse across blockchains. Auto-filled by Wallet.
         };
        const metaTx = await signer.sendTransaction(transactionParameters);
-        const gasLimit = metaTx['gasLimit'];//['_hex'];
+        const gasLimit = metaTx['gasLimit']; //['_hex'];
         const gasPrice =convert16(tx.gasPrice);
         const nonce = metaTx['nonce'];
         const txhash = metaTx['hash'];
@@ -338,7 +352,7 @@ async function sendMetaMaskTrans(tx: {to: any,
         };
         return Promise.resolve(transRes)
     } catch (e) {
-        log.error("metamask error",e);
+        log.error("Wallet error",e);
         return Promise.reject(e)
     }
 }
@@ -348,7 +362,7 @@ export async function isConnectedMeta() {
     return !!accounts && accounts.length > 0;
 }
 
-export function getMetaMaskAddress() {
+export function getWalletAddress() {
     return localStorage.getItem(meta_storage_key);
 }
 
@@ -381,7 +395,7 @@ export async function addToken(token: any, tokenAddress: string, tokenDecimals: 
         }
     }
     // wasAdded is a boolean. Like any RPC method, an error may be thrown.
-    return window.ethereum.request({
+    return getProvider().request({
         method: 'wallet_watchAsset',
         params: {
             type: 'ERC20', // Initially only supports ERC20, but eventually more!
@@ -395,20 +409,24 @@ export async function addToken(token: any, tokenAddress: string, tokenDecimals: 
     });
 }
 
-export function checkMetaMaskInstall(){
-    if (!MetaMaskOnboarding.isMetaMaskInstalled()) {
-        const onboarding = new MetaMaskOnboarding();
-        onboarding.stopOnboarding();
+export function checkInstall(walletType=WALLET_TYPES.BITGET){
+    if (getProvider() == undefined) {
+        showMsg( walletType + " wallet is not installed,Go to <a style='color:cornflowerblue' target='_blank' href='"+getWalletDownUrl(walletType)+"'>download and install</a>","");
         return false
     }
     return true;
+}
+
+function getWalletDownUrl(walletType=WALLET_TYPES.BITGET){
+    if(walletType==WALLET_TYPES.BITGET)
+        return "https://web3.bitget.com/en/wallet-download?type=1"
 }
 
 export async function signMessage(msg: string): Promise<any> {
     const meta_addr: any = await getMetaAccounts();
     try {
 
-        const provider = new ethers.BrowserProvider(window.ethereum);
+        const provider = new ethers.BrowserProvider(getProvider());
         
         const signer = await provider.getSigner();
         let msgBytes:any=null ;
@@ -422,17 +440,18 @@ export async function signMessage(msg: string): Promise<any> {
         return Promise.reject(e);
     }
 }
+
 export default {
-    getMetaMaskAddress,
+    getWalletAddress,
     isConnectedMeta,
     getMetaAccounts,
     getCurChainId,
-    sendMetaMaskContractTx,
-    sendMetaMaskTrans,
+    sendContractTx,
+    sendTrans,
     changeChain,
     setEnv,
     addToken,
-    checkMetaMaskInstall,
+    checkInstall,
     signMessage,
-    addMetamaskEventCallback,
+    addWalletEventCallback,
 };

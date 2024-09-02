@@ -9,6 +9,8 @@
         <el-button type="primary" @click="disconnect">DisConnect</el-button>
         <el-button type="primary" @click="signer">signer</el-button>
         <el-button type="primary" @click="postRequest">Test API</el-button>
+        <el-button type="primary" @click="logout">Log Out</el-button>
+
         <div>
           Bridge MetaMask:<el-switch
             v-model="bridgeMetaMask"
@@ -102,7 +104,7 @@
 
 <script>
 import axios from 'axios'
-import {PolisClient, PolisProvier} from '@metis.io/middleware-client'
+import {Oauth2Client, PolisClient, PolisProvier} from '@metis.io/middleware-client'
 import BigNumber from "bignumber.js";
 import Swal from 'sweetalert2'
 import {ethers} from 'ethers'
@@ -137,9 +139,9 @@ export default {
       ethcallmethod: 'get_block_number',
       ethcallargs: '',
       method: "",
-      chainid: 599,
+      chainid: 59902,
       balance: 0,
-      address: "0xf1181bd15E8780B69a121A8D8946cC1C23972Bd4",
+      address: "0xA35f56ebF874Df1B6aC09E72528e1a86D4F1EF2B",
       result: "",
       userInfo: "",
       oauthInfo: {},
@@ -155,14 +157,14 @@ export default {
         // domain: "l1bridge-666",
         // method: "depositERC20",
         method: "transfer",
-        address: "0x70E45aD1d427532d8E7A86bC2037be0fd00e4829",
-        args: "0xf1181bd15E8780B69a121A8D8946cC1C23972Bd4,100000000",
+        address: "0x53Fb866780f7b499AdfEa7c7153C984fB76fAC7D",
+        args: "0xA35f56ebF874Df1B6aC09E72528e1a86D4F1EF2B,100000000",
         // args: "0xe552fb52a4f19e44ef5a967632dbc320b0820639,0x4200000000000000000000000000000000000006,10000000,3200,",
         // args:"1000000000,0x507d2C5444Be42A5e7Bd599bc370977515B7353F",
         result: ""
       },
       ethTx: {
-        to: '0xf1181bd15E8780B69a121A8D8946cC1C23972Bd4',
+        to: '0xA35f56ebF874Df1B6aC09E72528e1a86D4F1EF2B',
         value: "10000000000000000",
       },
       logs: {
@@ -222,8 +224,10 @@ export default {
       this.polisclient = new PolisClient({
         appId: this.appid,
         chainId: this.chainid,
-        apiHost: this.apiHost,
+        apiHost:  this.apiHost,
         oauthHost: this.oauthHost+"/",
+
+        debug:true
         // useNuvoProvider: true
       })
 
@@ -323,13 +327,13 @@ export default {
         console.log("changeChain id", id)
       })
       this.polisclient.changeChain(this.chainid);
-      const daiContract = this.polisclient.getContract(daiAddress, daiAbi);
-      this.contract.result = await daiContract.name();
+      const daiContract = await this.polisclient.getContract(daiAddress, daiAbi);
+      this.contract.result = await daiContract["name"]();
       // console.log(this.contract.result)
       const daiContract2 = new ethers.Contract(daiAddress, daiAbi, this.polisclient.web3Provider);
       // const provider = new ethers.providers.JsonRpcProvider("https://stardust.metis.io/?owner=599");
       // const daiContract2 = new ethers.Contract(daiAddress, daiAbi, provider);
-      this.contract.result += "|" + await daiContract2.name();
+      this.contract.result += "|" + await daiContract2["name"]();
 
     },
 
@@ -581,7 +585,7 @@ export default {
     },
     async callContractPayable() {
      console.log( this.polisclient.oauthHost);
-      this.polisclient.changeChain(this.chainid);
+      // this.polisclient.changeChain(this.chainid);
       await this.polisclient.connect(this.oauthInfo,this.bridgeMetaMask)
       // test dac
       // let daiAddress = "0xDCf1E303b83872B129B1AfEf6443E2c2d1AA70B1";
@@ -598,14 +602,40 @@ export default {
       // // const data = '0x00000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000001400000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000018000000000000000000000000000000000000000000000000000000000000001c0000000000000000000000000000000000000000000000000000000000000000870306a3669387431000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c6e616d6570306a36693874310000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000c6c6f676f70306a36693874310000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001064657363206f662070306a3669387431000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006746573742c350000000000000000000000000000000000000000000000000000';
       // this.contract.result = await daiContract2?.createDAC(addresss, 1, data);
 
-
       //test erc20
       let daiAddress = this.contract.address;
       let daiAbi = ['function transfer(address to,uint256 amount)'];
+      let daiContract2 = await this.polisclient.getContract(daiAddress, daiAbi);
+      this.contract.result =JSON.stringify( await daiContract2["transfer"]('0xf1181bd15E8780B69a121A8D8946cC1C23972Bd4',1000000000000));
+
+      //test viction contract send value
+  /*    let daiAddress = this.contract.address;
+      let daiAbi =  [
+        {
+          "inputs": [
+            {
+              "internalType": "address payable",
+              "name": "to",
+              "type": "address"
+            }
+          ],
+          "name": "howmanyValue",
+          "outputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "stateMutability": "payable",
+          "type": "function"
+        }
+      ]
+
       let daiContract2 = this.polisclient.getContract(daiAddress, daiAbi);
-      this.contract.result =JSON.stringify( await daiContract2.transfer('0xf1181bd15E8780B69a121A8D8946cC1C23972Bd4',1000000000000));
+      this.contract.result =JSON.stringify( await daiContract2.howmanyValue('0x507d2C5444Be42A5e7Bd599bc370977515B7353F',{value:ethers.utils.parseUnits('0.1', 18)}));
 
-
+*/
       //ethers
       // const provider = new ethers.providers.Web3Provider(window.ethereum);
       // const opts: IPolisProviderOpts = {
@@ -644,10 +674,10 @@ export default {
           // from:"0xA35f56ebF874Df1B6aC09E72528e1a86D4F1EF2B",
           to: this.ethTx.to,
           value: valueHex,
-          gasLimit: ethers.BigNumber.from("21000").toHexString()
+          gasLimit: ethers.toQuantity("21000")
         }
         this.loading();
-        this.polisclient.web3Provider.getSigner().sendTransaction(tx).then(async res => {
+        (await this.polisclient.web3Provider.getSigner()).sendTransaction(tx).then(async res => {
           this.closeLoading();
           this.loading();
           //await res.wait()
@@ -743,8 +773,18 @@ export default {
       //     .then(function (res){
       //       console.log("get success.",res)
       //     })
-    }
+    },
+    async logout(){
+      let oauth2Client = new Oauth2Client(this.apiHost,this.oauthHost);
+      oauth2Client.logout(this.appid).then((res)=>{
+        console.log("logout:",res)
 
+      })
+          .catch((err)=>{
+            console.log("logout:",err)
+          })
+
+    }
   }
 }
 </script>
