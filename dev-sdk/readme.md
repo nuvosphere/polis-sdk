@@ -2,8 +2,11 @@
 # Nuvo  sdk
 
 ## Change log
+
 - v1.2.0
-  - support ethers6
+  - new login component
+- v1.1.42
+  - Optimizing trading performance
 - v1.1.41 
   - support bitget wallet
 
@@ -112,7 +115,7 @@ const polisprovider = new PolisProvider(opts)
 ### ethers.js
 
 ```javascript
-ethersProvider = new ethers.BrowserProvider(polisprovider)
+ethersProvider = new ethers.providers.Web3Provider(polisprovider)
 ```
 
 
@@ -158,13 +161,9 @@ this.polisclient.on('accountsChanged', (account) => {
 
 ## step 2  get Web3 Provider
 ```javascript
-ethersProvider=client.web3Provider // ethers.BrowserProvider
-//v1.2.0
-var singer = await ethersProvider.getSinger();
-//v1.1.x
-var singer =  ethersProvider.getSinger();
+ethersProvider=client.web3Provider // ethers.providers.Web3Provider
 
-singer.signMessage("aa");
+ethersProvider.getSinger().signMessage("aa")
 
 
 const daiAddress = this.contract.address;
@@ -184,12 +183,8 @@ const daiAbi = [
     "event Transfer(address indexed from, address indexed to, uint amount)"
 ];
 
-// v1.2.0 later
-const daiContract = await client.getContract(daiAddress, daiAbi);
-//v1.1.x
-const daiContract =  client.getContract(daiAddress, daiAbi);
-
-await daiContract['name']();
+const daiContract = client.getContract(daiAddress, daiAbi);
+await daiContract.name();
 
 ```
 

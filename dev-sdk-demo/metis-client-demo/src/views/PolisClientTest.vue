@@ -226,7 +226,6 @@ export default {
         chainId: this.chainid,
         apiHost:  this.apiHost,
         oauthHost: this.oauthHost+"/",
-
         debug:true
         // useNuvoProvider: true
       })
@@ -327,13 +326,13 @@ export default {
         console.log("changeChain id", id)
       })
       this.polisclient.changeChain(this.chainid);
-      const daiContract = await this.polisclient.getContract(daiAddress, daiAbi);
-      this.contract.result = await daiContract["name"]();
+      const daiContract = this.polisclient.getContract(daiAddress, daiAbi);
+      this.contract.result = await daiContract.name();
       // console.log(this.contract.result)
       const daiContract2 = new ethers.Contract(daiAddress, daiAbi, this.polisclient.web3Provider);
       // const provider = new ethers.providers.JsonRpcProvider("https://stardust.metis.io/?owner=599");
       // const daiContract2 = new ethers.Contract(daiAddress, daiAbi, provider);
-      this.contract.result += "|" + await daiContract2["name"]();
+      this.contract.result += "|" + await daiContract2.name();
 
     },
 
@@ -605,8 +604,8 @@ export default {
       //test erc20
       let daiAddress = this.contract.address;
       let daiAbi = ['function transfer(address to,uint256 amount)'];
-      let daiContract2 = await this.polisclient.getContract(daiAddress, daiAbi);
-      this.contract.result =JSON.stringify( await daiContract2["transfer"]('0xf1181bd15E8780B69a121A8D8946cC1C23972Bd4',1000000000000));
+      let daiContract2 = this.polisclient.getContract(daiAddress, daiAbi);
+      this.contract.result =JSON.stringify( await daiContract2.transfer('0xf1181bd15E8780B69a121A8D8946cC1C23972Bd4',1000000000000));
 
       //test viction contract send value
   /*    let daiAddress = this.contract.address;
@@ -674,10 +673,10 @@ export default {
           // from:"0xA35f56ebF874Df1B6aC09E72528e1a86D4F1EF2B",
           to: this.ethTx.to,
           value: valueHex,
-          gasLimit: ethers.toQuantity("21000")
+          gasLimit: ethers.BigNumber.from("21000").toHexString()
         }
         this.loading();
-        (await this.polisclient.web3Provider.getSigner()).sendTransaction(tx).then(async res => {
+        this.polisclient.web3Provider.getSigner().sendTransaction(tx).then(async res => {
           this.closeLoading();
           this.loading();
           //await res.wait()

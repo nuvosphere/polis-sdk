@@ -14,8 +14,6 @@ export const WALLET_TYPES ={
   NONE:'NONE'
 }
 
-export const THIRD_WALLETS = [WALLET_TYPES.MM,WALLET_TYPES.BITGET]
-
 export const reservedEvents = [
   "session_request",
   "session_update",

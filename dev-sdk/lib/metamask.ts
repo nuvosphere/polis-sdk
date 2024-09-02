@@ -1,5 +1,5 @@
 import MetaMaskOnboarding from '@metamask/onboarding';
-import { ethers } from 'ethers';
+import { ethers,BigNumber } from 'ethers';
 import Swal from 'sweetalert2';
 import errData from './error';
 
@@ -12,8 +12,8 @@ let env: string = 'prod';
 let _disableTooltip: boolean = false;
 
 function convert16(num: any) {
-  // return ethers.hexValue(num);
-  return ethers.toQuantity(num);
+  // return ethers.utils.hexValue(num);
+  return ethers.utils.hexValue(BigNumber.from(num).toHexString());
 }
 
 function error(msg: string, iconStr: any = 'error') {
@@ -197,18 +197,17 @@ export async function sendMetaMaskContractTx(trans: any, chain: any,disableToolt
   }
 
   try {
-    const provider = new ethers.BrowserProvider(window.ethereum);
-    const signer =await provider.getSigner(trans.eth_address);
+    const provider = new ethers.providers.Web3Provider(window.ethereum);
+    const signer = provider.getSigner(trans.eth_address);
     const daiAddress = trans.contract_address;
     const daiAbi = [trans.func_abi_sign];
     // const daiAbi = ["function transfer(address to, uint amount)"];
     const contract = new ethers.Contract(daiAddress, daiAbi, provider);
-    const daiWithSigner:ethers.BaseContract = contract.connect(signer);
+    const daiWithSigner = contract.connect(signer);
     // const txHash = await  contract[trans.function](trans.args);
     const overrides = {
       value: trans.value,
     };
-    // @ts-ignore
     const metaTx = await daiWithSigner[trans.function](...trans.args, overrides);
     const gasLimit = metaTx['gasLimit']['_hex'];
     const gasPrice = metaTx['gasPrice']['_hex'];

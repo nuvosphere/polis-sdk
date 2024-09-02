@@ -8,6 +8,7 @@ export interface IPolisEndPoints {
     wsServer?:string,
     apiHost:string,
     oauthHost?:string,
+    oauthPath?:string
 }
 export type TOpenLink = (link:string, postData: object,wallet_type:string)=> void
 export interface IPolisClientOpts{
@@ -18,7 +19,8 @@ export interface IPolisClientOpts{
     showLoading?:boolean,
     debug?:boolean,
     useNuvoProvider?:boolean,
-    openLink?: TOpenLink
+    openLink?: TOpenLink,
+    oauthPath?:string
 }
 
 export interface IPolisOauth2Opts{

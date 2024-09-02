@@ -19,7 +19,7 @@ export class PolisClient {
     private _oauthLoginuRL:   string = ''
     private _appId: string = ''
     private _authInfo?: IOauth2Info;
-    private _ethProvider?:ethers.BrowserProvider;
+    private _ethProvider?:ethers.providers.Web3Provider;
     // private _eventManager: EventManager = new EventManager();
     private _chainId:number = -1;
     private _polisprovider?:PolisProvider;
@@ -40,7 +40,9 @@ export class PolisClient {
             this._oauthHost = opts.oauthHost
         }
 
+        // console.log("aouth:",this._oauthHost)
         this._useNuvoProvider = opts.useNuvoProvider == undefined?true:opts.useNuvoProvider;
+        // console.log("_nuvoProvider:",this._useNuvoProvider);
         /**
          * for oauth login
          */
@@ -56,7 +58,8 @@ export class PolisClient {
                 chainId: this.chainId,
                 token: this.token,
                 debug: opts.debug,
-                openLink: opts?.openLink ?? null
+                openLink: opts?.openLink ?? null,
+                oauthPath:opts.oauthPath,
                 // showLoading:opts.showLoading
             })
         }
@@ -188,10 +191,10 @@ export class PolisClient {
         }
     }
 
-    public  async getContract(contractAddress:string,abi:any){
+    public getContract(contractAddress:string,abi:any){
         if(this._ethProvider!=undefined){
             if(this.token){
-                return  new ethers.Contract(contractAddress,abi,await this._ethProvider.getSigner())
+                return  new ethers.Contract(contractAddress,abi,this._ethProvider.getSigner())
             }
             else{
                 return  new ethers.Contract(contractAddress,abi,this._ethProvider)
@@ -562,7 +565,7 @@ export class PolisClient {
     private initProvider(opts: IPolisProviderOpts):void {
         this._polisprovider = new PolisProvider(opts,this._polisOauthClient);
         //　
-        this._ethProvider = new ethers.BrowserProvider(this._polisprovider,'any');
+        this._ethProvider = new ethers.providers.Web3Provider(this._polisprovider,'any');
     }
 
     private async handleRefreshTokenAsync() :Promise<any>{
@@ -659,9 +662,9 @@ export class PolisClient {
         }else{
             if(wcSession){
                 // const wcProvider = await wallectConnector.getWalletConnectProvider();
-                // this._ethProvider = new ethers.BrowserProvider(wcProvider,'any');
+                // this._ethProvider = new ethers.providers.Web3Provider(wcProvider,'any');
             }else{
-                this._ethProvider = new ethers.BrowserProvider(this._polisprovider,'any');
+                this._ethProvider = new ethers.providers.Web3Provider(this._polisprovider,'any');
             }
         }
     }

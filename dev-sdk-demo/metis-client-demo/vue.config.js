@@ -1,20 +1,5 @@
 // vue.config.js
 module.exports = {
-    configureWebpack: {
-        module: {
-            rules: [
-                {
-                    test: /\.js$/,
-                    use: {
-                        loader: 'babel-loader',
-                        options: {
-                            presets: ['@babel/preset-env']
-                        }
-                    }
-                }
-            ]
-        }
-    },
     devServer: {
         disableHostCheck: true,
         hot: true,

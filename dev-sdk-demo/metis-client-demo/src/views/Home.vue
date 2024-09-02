@@ -29,16 +29,7 @@
       </div>
       <br/>
       <div>
-      <div>Oauth2 Param</div>
-      <div>
-        <div>APP ID</div>
-        <el-input style="width: 300px"  v-model="appId"></el-input>
-      </div>
-      <div>
-         <div>APP Host</div>
-          <el-input style="width: 300px"  v-model="oauthHost"></el-input>
-        </div>
-          <el-button type="primary" @click="startOauth2New">Polis Client Start oauth2</el-button>
+        <el-button type="primary" @click="startOauth2New">Polis Client Start oauth2</el-button>
       </div>
     </div>
 
@@ -80,33 +71,30 @@ export default {
   },
   mounted() {
     // console.log(Oauth2Client, WebSocketClient)
-     this.initPolisClient();
+    const opts = {
+      appId:this.appId,
+      chainId:this.chainId,
+      // apiHost: "https://polis-test.meits.io",
+      apiHost: this.apiHost,
+      oauthHost: this.oauthHost,
+    }
+    this.polisclient = new PolisClient(opts);
+    this.polisclient.on('debug',function (data){
+      console.log("debug",data)
+    })
+    const test = function(event) {
+      console.log('receive document', event)
+    }
+    const test2 = function(event) {
+      console.log('receive window', event)
+    }
+    document.removeEventListener('message', test);
+    document.addEventListener('message', test);
+    window.removeEventListener('message', test2);
+    window.addEventListener('message', test2);
+    // this.openWin()
   },
   methods: {
-    initPolisClient(){
-      const opts = {
-        appId:this.appId,
-        chainId:this.chainId,
-        // apiHost: "https://polis-test.meits.io",
-        apiHost: this.apiHost,
-        oauthHost: this.oauthHost,
-      }
-      this.polisclient = new PolisClient(opts);
-      this.polisclient.on('debug',function (data){
-        console.log("debug",data)
-      })
-      const test = function(event) {
-        console.log('receive document', event)
-      }
-      const test2 = function(event) {
-        console.log('receive window', event)
-      }
-      document.removeEventListener('message', test);
-      document.addEventListener('message', test);
-      window.removeEventListener('message', test2);
-      window.addEventListener('message', test2);
-      return this.polisclient;
-    },
     openWin() {
       window.open('https://www.baidu.com')
     },
@@ -138,7 +126,7 @@ export default {
       }
       console.log("authOps:",authOps)
       //user login auth
-      this.initPolisClient().startOauth2(authOps);
+      this.polisclient.startOauth2(authOps);
     },
     startOauth2WC() {
       this.savePreCode();
@@ -148,7 +136,7 @@ export default {
         switchAccount: this.switchAccount
       }
       //user login auth
-      this.initPolisClient().startOauth2(authOps);
+      this.polisclient.startOauth2(authOps);
     },
     clientGetBalance() {
       this.polisclient.web3Provider.getBalance(this.address).then( res => {

@@ -1,4 +1,4 @@
-import { ethers } from 'ethers';
+import { BigNumber, ethers } from 'ethers';
 import Swal from 'sweetalert2';
 import errors, { toError } from './erros';
 import log from "./utils/log"
@@ -23,8 +23,21 @@ function getProvider(providerType:string=WALLET_TYPES.BITGET){
 
 function convert16(num: any) {
     // return '0x' + num.toString(16);
-    return ethers.toQuantity(num);
-    // return ethers.hexValue(num);
+    return ethers.utils.hexValue(BigNumber.from(num).toHexString());
+    // return ethers.utils.hexValue(num);
+}
+
+function hexlify(v:any) {
+    return ethers.utils.hexlify(v)
+}
+
+function toBigNumber(num:any){
+    return BigNumber.from(num);
+}
+
+function numToHexlify(num: any) {
+    // return '0x' + num.toString(16);
+    return BigNumber.from(num).toHexString();
 }
 
 // success,error,warning,info,question
@@ -238,18 +251,18 @@ export async function sendContractTx(trans: any, chain: any) {
     }
 
     try {
-        const provider = new ethers.BrowserProvider(getProvider());
-        const signer = await provider.getSigner(trans.eth_address);
+        const provider = new ethers.providers.Web3Provider(getProvider());
+        const signer = provider.getSigner(trans.eth_address);
         const daiAddress = trans.contract_address;
         const daiAbi = [trans.func_abi_sign];
         // const daiAbi = ["function transfer(address to, uint amount)"];
-        const contract = new ethers.Contract(daiAddress, daiAbi, signer);
-        // const daiWithSigner:ethers.BaseContract = contract.connect(signer);
+        const contract = new ethers.Contract(daiAddress, daiAbi, provider);
+        const daiWithSigner = contract.connect(signer);
         // const txHash = await  contract[trans.function](trans.args);
         const overrides = {
             value: trans.value,
         };
-        const metaTx = await contract[trans.function](...trans.args, overrides);
+        const metaTx = await daiWithSigner[trans.function](...trans.args, overrides);
         const gasLimit = metaTx['gasLimit']['_hex'];
         const gasPrice = metaTx['gasPrice']['_hex'];
         const nonce = metaTx['nonce'];
@@ -310,24 +323,23 @@ async function sendTrans(tx: {to: any,
         return;
     }
     try {
-        const provider = new ethers.BrowserProvider(getProvider());
-        const signer = await provider.getSigner(from_addr);
+        const provider = new ethers.providers.Web3Provider(getProvider());
+        const signer = provider.getSigner(from_addr);
         if(!tx.data && tx.data.length<=0){
             tx.data = "0x";
         }
         const transactionParameters = {
-            nonce: tx.nonce, // ignored by Wallet
+            nonce: convert16(tx.nonce), // ignored by Wallet
             gasPrice: convert16(tx.gasPrice), // customizable by user during Wallet confirmation.
             gasLimit: convert16(tx.gas), // customizable by user during Wallet confirmation.
             to: tx.to, // Required except during contract publications.
             from: tx.from, // must  match user's active address.
             value: convert16(tx.value), // Only required to send ether to the recipient from the initiating external account.
             data: tx.data, // Optional, but used for defining smart contract creation and interaction.
-            chainId: tx.chainId // U
-            // sed to prevent transaction reuse across blockchains. Auto-filled by Wallet.
+            chainId: tx.chainId // Used to prevent transaction reuse across blockchains. Auto-filled by Wallet.
         };
        const metaTx = await signer.sendTransaction(transactionParameters);
-        const gasLimit = metaTx['gasLimit']; //['_hex'];
+        const gasLimit = metaTx['gasLimit']['_hex'];
         const gasPrice =convert16(tx.gasPrice);
         const nonce = metaTx['nonce'];
         const txhash = metaTx['hash'];
@@ -426,14 +438,14 @@ export async function signMessage(msg: string): Promise<any> {
     const meta_addr: any = await getMetaAccounts();
     try {
 
-        const provider = new ethers.BrowserProvider(getProvider());
+        const provider = new ethers.providers.Web3Provider(getProvider());
         
-        const signer = await provider.getSigner();
+        const signer = provider.getSigner();
         let msgBytes:any=null ;
-        if(ethers.isHexString(msg)){
-            msgBytes = ethers.getBytes(msg)
+        if(ethers.utils.isHexString(msg)){
+            msgBytes = ethers.utils.arrayify(msg)
         }else{
-            msgBytes = ethers.toUtf8Bytes(msg)
+            msgBytes = ethers.utils.toUtf8Bytes(msg)
         }
         return signer.signMessage(msgBytes);
     } catch (e) {

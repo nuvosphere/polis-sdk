@@ -52,7 +52,8 @@ import {
 
 import gql from "graphql-tag";
 
-const TOPTENUSER_RANKING = gql`query MyQuery {
+const TOPTENUSER_RANKING = gql`
+  query MyQuery {
     userEntities(first: 10, orderBy: badgeCount, orderDirection: desc) {
       ranking
       rp
@@ -61,14 +62,15 @@ const TOPTENUSER_RANKING = gql`query MyQuery {
       socialName
       socialUri
   }
-}`;
+}
+`;
 
 const GRAPHQL_URI =
   "https://graphnode-graphql.staging.metisdevops.link/subgraphs/name/metis-gallery";
 
-export default {
+export default ({
   name: "Hello,world",
-  mounted() {
+  async mounted() {
     const httpLink = createHttpLink({
       uri: GRAPHQL_URI,
       headers: {
@@ -103,7 +105,7 @@ export default {
         await sleep();
       }
     };
-    // q().catch(console.log);
-  }
-}
+    q().catch(console.log);
+  },
+});
 </script>
