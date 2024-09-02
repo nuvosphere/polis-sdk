@@ -36,6 +36,11 @@
     <br/>
     <div>
       <el-button type="primary" @click="startOauth2WC">Polis Client WalletConnect</el-button>
+      <el-button type="primary" @click="testIframe(apiHost)">testIframe</el-button>
+      <el-button type="primary" @click="testIframe('https://me.qa.nuvosphere.io')">testIframe2</el-button>
+
+      <el-button type="primary" @click="postMessage">RN post message</el-button>
+      <el-button type="primary" @click="openWin">openWin</el-button>
     </div>
   </div>
 </template>
@@ -44,6 +49,7 @@
 // @ is an alias to /src
 import {Oauth2Client, WebSocketClient} from '@metis.io/middleware-client'
 import {PolisClient} from '@metis.io/middleware-client'
+import Swal from 'sweetalert2';
 
 export default {
   name: 'Home',
@@ -55,6 +61,7 @@ export default {
       returnUrl: process.env.VUE_APP_RETURN_URL,
       returnUrl2: process.env.VUE_APP_RETURN_URL2,
       apiHost: process.env.VUE_APP_API_HOST,
+      oauthHost:process.env.VUE_APP_TOKEN_URL,
       switchAccount: false,
       chainId:4,
       pre_code:"",
@@ -68,16 +75,32 @@ export default {
       appId:this.appId,
       chainId:this.chainId,
       // apiHost: "https://polis-test.meits.io",
-      apiHost: this.apiHost
-
+      apiHost: this.apiHost,
+      oauthHost: this.oauthHost,
     }
     this.polisclient = new PolisClient(opts);
     this.polisclient.on('debug',function (data){
       console.log("debug",data)
     })
-
+    const test = function(event) {
+      console.log('receive document', event)
+    }
+    const test2 = function(event) {
+      console.log('receive window', event)
+    }
+    document.removeEventListener('message', test);
+    document.addEventListener('message', test);
+    window.removeEventListener('message', test2);
+    window.addEventListener('message', test2);
+    // this.openWin()
   },
   methods: {
+    openWin() {
+      window.open('https://www.baidu.com')
+    },
+    postMessage() {
+      window.ReactNativeWebView.postMessage(JSON.stringify({ status: 'ERROR', code: 1000, message: 'CANCEL' }))
+    },
     startOauth2() {
       console.log(this.appId);
       let oauth2Client = new Oauth2Client(this.apiHost);
@@ -101,6 +124,7 @@ export default {
         returnUrl: this.returnUrl2,
         switchAccount: this.switchAccount
       }
+      console.log("authOps:",authOps)
       //user login auth
       this.polisclient.startOauth2(authOps);
     },
@@ -108,7 +132,7 @@ export default {
       this.savePreCode();
       const authOps = {
         appId: this.appId,
-        returnUrl: "http://polis.localhost:8000/#/wc",
+        returnUrl: "http://localhost:8000/#/wc",
         switchAccount: this.switchAccount
       }
       //user login auth
@@ -121,6 +145,46 @@ export default {
         console.log("err:",err);
         alert(err)
       })
+    },
+    testIframe(host=this.apiHost) {
+      // open a dialog
+      // alert(host)
+      let width = 720;
+      let height = 480;
+      const confirmUrl = host
+
+      const dialog = Swal.mixin({
+        customClass:{
+          container: 'nuvo-test-swal2-container'
+        },
+        showClass: {
+          popup: 'nuvo-test-swal2-show',
+        }
+      });
+      const confirmWin = dialog.fire({
+        title: '<span style="font-size: 24px;font-weight: bold;color: #FFFFFF;font-family: Helvetica-Bold, Helvetica">Request Confirmation</span>',
+        html: `<iframe src="${confirmUrl}" style="width: 100%; height: ${height}px;" frameborder="0" id="metisConfirmIframe"></iframe>`,
+        width: `${width}px`,
+        showConfirmButton: false,
+        background: '#3A1319',
+        didOpen: (dom) => {
+          document.getElementById('metisConfirmIframe').onload = function () {
+            // (document.getElementById('metisConfirmIframe') as HTMLIFrameElement).contentWindow!.postMessage(transObj, confirmUrl.split('/#')[0]);
+            console.log("token:",document.cookie['token'])
+          };
+        },
+        didClose: () => {
+          window.postMessage({status: 'ERROR', code: 1000, message: 'CANCEL'}, window.location.origin);
+        },
+      });
+      const self = this;
+      return new Promise((resolve, reject) => {
+        function globalMessage(event) {
+
+        }
+
+        window.addEventListener('message', globalMessage, false);
+      });
     }
   }
 }

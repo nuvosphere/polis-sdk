@@ -6,14 +6,16 @@ import { PolisProvider } from "../provider/polisProvider";
 import { PolisOauth2Client } from "../provider/PolisOauth2Client";
 import request from "../request";
 import { addToken } from "../metamask";
-import wallectConnector from "../provider/wallectConnector";
+// import wallectConnector from "../provider/wallectConnector";
 import log from "../provider/utils/log";
 import { WALLET_TYPES } from "../provider/utils";
+import { NuvoWeb3Provider } from "../provider/NuvoWeb3Provider";
 
 export class PolisClient {
 
     private _confirmUrL: string = '';
     private _apiHost: string = '';
+    private _oauthHost: string = '';
     private _oauthLoginuRL:   string = ''
     private _appId: string = ''
     private _authInfo?: IOauth2Info;
@@ -22,6 +24,7 @@ export class PolisClient {
     private _chainId:number = -1;
     private _polisprovider?:PolisProvider;
     private _polisOauthClient?:PolisOauth2Client;
+    private _useNuvoProvider:boolean = true;
 
     constructor(opts:IPolisClientOpts) {
         // super();
@@ -29,8 +32,17 @@ export class PolisClient {
             this._apiHost = opts.apiHost;
         }
         else{
-            this._apiHost ='https://polis.metis.io/'
+            this._apiHost ='https://api.nuvosphere.io/'
         }
+        if(!!!opts.oauthHost){
+            this._oauthHost = this._apiHost.replace("//api.","//oauth.")
+        }else{
+            this._oauthHost = opts.oauthHost
+        }
+
+        console.log("aouth:",this._oauthHost)
+        this._useNuvoProvider = opts.useNuvoProvider == undefined?true:opts.useNuvoProvider;
+        console.log("_nuvoProvider:",this._useNuvoProvider);
         /**
          * for oauth login
          */
@@ -42,9 +54,11 @@ export class PolisClient {
         if (!!!this._ethProvider){
             this.initProvider({
                 apiHost: this.apiHost,
+                oauthHost: this.authHost,
                 chainId: this.chainId,
                 token: this.token,
-                debug: opts.debug
+                debug: opts.debug,
+                openLink: opts?.openLink ?? null
                 // showLoading:opts.showLoading
             })
         }
@@ -59,6 +73,9 @@ export class PolisClient {
     // region properties
     get apiHost() {
         return this._apiHost;
+    }
+    get authHost() {
+       return this._oauthHost;
     }
 
     set apiHost(value) {
@@ -80,11 +97,11 @@ export class PolisClient {
 
     get confirmUrl() {
         // return this._confirmUrL;
-        return `${this.apiHost}#/oauth2/confirm`;
+        return `${this.authHost}#/oauth2/confirm`;
     }
 
     get oauthLoginUrl() {
-        return `${this.apiHost}#/oauth2-login?`;
+        return `${this.authHost}#/oauth2-login?`;
     }
 
     get oauthInfo() {
@@ -142,12 +159,7 @@ export class PolisClient {
             if(this._polisprovider){
                this._polisprovider.connect(auth.accessToken,bridgeTx, needWcSession)
                 //if(auth.session){
-                if(needWcSession){
-                    const wcProvider = await wallectConnector.getWalletConnectProvider();
-                    this._ethProvider = new ethers.providers.Web3Provider(wcProvider,'any');
-                }else{
-                    this._ethProvider = new ethers.providers.Web3Provider(this._polisprovider,'any');
-                }
+                await this.initJsonRPCProvider(needWcSession);
             }
 
         }else if(typeof(auth)=="string"){
@@ -169,12 +181,7 @@ export class PolisClient {
                     needWcSession =  await this.saveWCSession()
                 }
                 this._polisprovider.connect(auth,bridgeTx, needWcSession);
-                if(needWcSession){
-                    const wcProvider = await wallectConnector.getWalletConnectProvider();
-                    this._ethProvider = new ethers.providers.Web3Provider(wcProvider,'any');
-                }else{
-                    this._ethProvider = new ethers.providers.Web3Provider(this._polisprovider,'any');
-                }
+                await this.initJsonRPCProvider(needWcSession);
             }
         }
         else{
@@ -641,6 +648,24 @@ export class PolisClient {
 
     private emit(name:string,obj:any){
         this._polisprovider?.emit(name,obj)
+    }
+
+    private async initJsonRPCProvider(wcSession=false){
+        if(this._useNuvoProvider){
+            if(wcSession){
+                // const wcProvider = await wallectConnector.getWalletConnectProvider();
+                // this._ethProvider = new NuvoWeb3Provider(wcProvider,'any');
+            }else{
+                this._ethProvider = new NuvoWeb3Provider(this._polisprovider,'any');
+            }
+        }else{
+            if(wcSession){
+                // const wcProvider = await wallectConnector.getWalletConnectProvider();
+                // this._ethProvider = new ethers.providers.Web3Provider(wcProvider,'any');
+            }else{
+                this._ethProvider = new ethers.providers.Web3Provider(this._polisprovider,'any');
+            }
+        }
     }
 }
 

@@ -18,10 +18,11 @@ import { PolisOauth2Client } from "./PolisOauth2Client";
 import Swal from "sweetalert2";
 import errors from "./erros";
 import WalletConnect from "@walletconnect/client";
-import wallectConnector from "./wallectConnector";
+// import wallectConnector from "./wallectConnector";
 import log from "./utils/log"
 import sdkErrors from "./erros";
 import { TX_TYPE } from "../provider/utils";
+import {isIOS, isMobile} from "./utils/browser";
 
 let _nextId = 1;
 
@@ -31,6 +32,8 @@ let _nextId = 1;
 export class PolisProvider extends JsonRpcEngine {
     _confirmUrl: string = '';
     _apiHost: string = '';
+    _oauthHost:string =''
+    host:string = '';
     _chainId: number = -1;
     _wallet_type: string = '';
     // private _eventManager: EventManager = new EventManager();
@@ -46,18 +49,27 @@ export class PolisProvider extends JsonRpcEngine {
         // showLoading:false,
     }
     loadingDialog: any;
-    
+    _openWindowBtnId: 'open-win-tips';
     constructor(opts: IPolisProviderOpts, polisOauth2Client?: PolisOauth2Client) {
         super()
         
         if (!opts.apiHost || opts.apiHost.length <= 0) {
-            this._apiHost = "https://polis.metis.io";
+            this._apiHost = "https://api.nuvosphere.io/";
         } else {
             if (!opts.apiHost.endsWith('/')) {
                 this._apiHost = this._apiHost + '/'
             }
             this._apiHost = opts.apiHost;
         }
+        if(!!!opts.oauthHost){
+            this._oauthHost = this._apiHost.replace("://api.","://oauth.");
+            if (!opts.apiHost.endsWith('/')) {
+                this._apiHost = this._apiHost + '/'
+            }
+        }else{
+            this._oauthHost = opts.oauthHost
+        }
+        this.host = this._apiHost;
         this._chainId = opts.chainId;
         this._polisOauth2Client = polisOauth2Client;
         this.providerOpts = opts;
@@ -71,11 +83,11 @@ export class PolisProvider extends JsonRpcEngine {
     
     
     get confirmUrl() {
-        return `${this.apiHost}#/oauth2/confirm`;
+        return `${this.authHost}#/oauth2/confirm`;
     }
     
     get bridgeUrl() {
-        return `${this.apiHost}#/oauth2/bridge`;
+        return `${this.authHost}#/oauth2/bridge`;
     }
     
     get rpcUrl() {
@@ -92,6 +104,10 @@ export class PolisProvider extends JsonRpcEngine {
     
     get apiHost() {
         return this._apiHost;
+    }
+
+    get authHost() {
+        return this._oauthHost;
     }
     
     get walletType() {
@@ -114,7 +130,6 @@ export class PolisProvider extends JsonRpcEngine {
         const self = this;
         return new Promise<any>((resolve, reject) => {
             this.handle(req, function (err, response: any) {
-                
                 if (err) {
                     reject(err)
                 } else {
@@ -128,20 +143,21 @@ export class PolisProvider extends JsonRpcEngine {
         this._bridgeTx = bridgeMetamask;
         this.providerOpts.token = token;
         //if (!bridgeMetamask) {
-        if (needWcSession) {
-            this.initWcConnector(true);
-        }
+
+        // if (needWcSession) {
+        //     this.initWcConnector(true);
+        // }
         this.initWallet()
     }
     
-    private initWcConnector(init = false) {
-        if (!this._wcConnector || init) {
-            this._wcConnector = wallectConnector.getWalletConnector();
-        }
-        if (!this._wcConnector.connected) {
-            this._wcConnector.createSession();
-        }
-    }
+    // private initWcConnector(init = false) {
+    //     if (!this._wcConnector || init) {
+    //         this._wcConnector = wallectConnector.getWalletConnector();
+    //     }
+    //     if (!this._wcConnector.connected) {
+    //         this._wcConnector.createSession();
+    //     }
+    // }
     
     /**
      *
@@ -150,7 +166,7 @@ export class PolisProvider extends JsonRpcEngine {
         const self = this;
         
         this.push(async (req, res, next, end) => {
-            
+
             if (req.method === 'eth_chainId') {
                 res.result = self.chainId;
                 end();
@@ -211,7 +227,7 @@ export class PolisProvider extends JsonRpcEngine {
         return createAsyncMiddleware(async (req, res: any, next) => {
             if (req.method == 'eth_sendTransaction') {
                 await this.confirmTrans(req, res); //res
-                    this.emit(PolisEvents.TX_CONFIRM_EVENT, Object.assign({}, {action: 'after confirmTrans'}, res));
+                this.emit(PolisEvents.TX_CONFIRM_EVENT, Object.assign({}, {action: 'after confirmTrans'}, res));
             } else {
                 next()
             }
@@ -228,7 +244,7 @@ export class PolisProvider extends JsonRpcEngine {
         let walletType = "";
         try {
             const estimateTx:DomainTransactionInfo = await this.estimatePolisTrans(req);
-    
+
             if (this._bridgeTx || this.walletType == WALLET_TYPES.LOCAL || this.walletType == WALLET_TYPES.POLIS) {
                 return   this.confirmTransBridge(req, res,estimateTx);
             }
@@ -366,11 +382,11 @@ export class PolisProvider extends JsonRpcEngine {
             signMsg = await mmWallet.signMessage(req.params[0]);
             return signMsg;
         } else if (walletType == "WALLETCONNECT") {
-            this.initWcConnector();
-            if (this._wcConnector) {
-                const signMsg = wallectConnector.signMessage(this._wcConnector, req.params[0]);
-                return signMsg;
-            }
+            // this.initWcConnector();
+            // if (this._wcConnector) {
+            //     const signMsg = wallectConnector.signMessage(this._wcConnector, req.params[0]);
+            //     return signMsg;
+            // }
         }
         return Promise.reject(errors.ACCOUNT_NOT_EXIST);
         
@@ -397,9 +413,101 @@ export class PolisProvider extends JsonRpcEngine {
             return Promise.reject(response.data.error);
         }
     }
-    
+
+    /**
+     * initConfrimWindow
+     * @param iframeId  if has iframeId use iframe
+     * @param transObj
+     * @param confirmUrl
+     * @private
+     */
+    private initConfirmWindow(iframeId: string, transObj: BridgeTransactionInfo,confirmUrl: string) {
+        let confirmWindow: any = null
+        const handleWindowLoad = function(event: any) {
+            // log.debug('received message', event)
+            if(event.data && event.data.type && event.data.type === 'windowLoaded') {
+                confirmWindow!.postMessage(transObj, confirmUrl.split('/#')[0]);
+                // log.debug('postMessage', transObj)
+                // loaded send message  and remove listen
+                window.removeEventListener('message', handleWindowLoad, false);
+            }
+        }
+        //if is ios mobile bind open-win-btn click to open wind
+        if(iframeId) {
+            // if has iframeId must send message to iframe
+            // if is new Window must send to open window
+            document.getElementById(iframeId)!.onload = function () {
+                (document.getElementById(iframeId) as HTMLIFrameElement).contentWindow!.postMessage(transObj, confirmUrl.split('/#')[0]);
+            };
+            // remove swal2 default margin and padding in full screen class for walletconnect pop up
+            let swal2Contain = document.querySelector('.swal2-container.full-screen')
+            if(swal2Contain)  {
+                // @ts-ignore must upto loading
+                swal2Contain.style.zIndex = '99999999'
+                // @ts-ignore
+                swal2Contain.style.padding= '0px';
+                // @ts-ignore
+                swal2Contain.querySelector('.swal2-html-container').style = "margin:0px;border-radius:5px;"
+            }
+
+        } else {
+            document.getElementById(this._openWindowBtnId).onclick = function() {
+                confirmWindow = window.open(confirmUrl)
+                // must to check new window is onloaded
+                window.addEventListener('message', handleWindowLoad, false);
+            }
+        }
+    }
+
+    private safariaOpenWindowDom() {
+        //
+        const fontFamily = 'font-family:Poppins-Regular,Poppins,BlinkMacSystemFont,Segoe UI,Roboto,Oxygen-Sans,Ubuntu,Cantarell,Helvetica Neue,Helvetica,Arial,sans-serif;'
+        return `<div style="${fontFamily}padding-top:30px;padding-bottom:20px;">
+                    <img
+                        class="accept-logo"
+                        src="../../assets/images/ic_dark_twirl.png"
+                    />
+                    <div class="" 
+                    style="color:#FFF;font-size: 16px;font-weight: 400;line-height: 22px;">
+                        Due to the restriction on iOS. we need <br>
+                        your help to open the transaction <br>
+                        confirmation screen manually.
+                    </div>
+
+                    <div id="${this._openWindowBtnId}" style="
+                    width: 180px;
+                    height: 48px;
+                    background: linear-gradient(92.21deg, #670057 0.19%, #D9016E 107.44%);
+                    border-radius: 8px;
+                    display: flex; 
+                    align-items: center;
+                    justify-content: center;margin:auto;margin-top:32px;color:#FFF;cursor:pointer;">OPEN</div>
+
+                    <div id="${this._openWindowBtnId}" style="
+                    width: 180px;
+                    height: 48px;
+                    background: transparent;
+                    border: 1px solid #670057;
+                    border-radius: 8px;
+                    display: flex; 
+                    align-items: center;
+                    justify-content: center;margin:auto;margin-top:32px;color:#670057;cursor:pointer;">DECLINE</div>
+                </div>`
+    }
+
+    /**
+     * checkNeedUserIframe
+     * @param walletType
+     * @private
+     */
+    private checkNeedUserIframe(walletType:string) {
+        // only isMobile and isIos and wallet is Local need use win open
+        return !(isMobile() && isIOS() && (walletType === WALLET_TYPES.LOCAL))
+        // return false
+    }
+
     private async polisConfirm(tx: DomainTransactionInfo, accessToken: string, confirmUrl: string): Promise<any> {
-        // open a dialog
+        const useIframe = this.checkNeedUserIframe(tx.walletType)
         const transObj:BridgeTransactionInfo = {
             chainId: tx.chainId,
             from: tx.from,
@@ -417,32 +525,53 @@ export class PolisProvider extends JsonRpcEngine {
             act:tx.act,
             blsWalletOpen:tx.blsWalletOpen,
         };
-        let width = 720;
-        let height = 480;
-        
-        const confirmWin = dialog.fire({
-            title: '<span style="font-size: 24px;font-weight: bold;color: #FFFFFF;font-family: Helvetica-Bold, Helvetica">Request Confirmation</span>',
-            html: `<iframe src="${confirmUrl}" style="width: 100%; height: ${height}px;" frameborder="0" id="metisConfirmIframe"></iframe>`,
+        let width = 700;
+        let height = 680;
+        // check for openLink
+        if(this.providerOpts.openLink){
+            return this.providerOpts.openLink(confirmUrl, transObj,tx.walletType)
+        }
+        // open a dialog
+        let dialogOptions = useIframe ? {
+            title: '',
+            html: `<iframe src="${confirmUrl}" style="width: 100%; height: ${height}px; overflow: scroll" frameborder="0" id="metisConfirmIframe"></iframe>`,
             width: `${width}px`,
+        }: {
+            html: `${this.safariaOpenWindowDom()}`,
+        }
+        dialog.fire({
+            ...dialogOptions,
+            background: '#151515',
             showConfirmButton: false,
-            background: '#3A1319',
             didOpen: (dom) => {
-                document.getElementById('metisConfirmIframe')!.onload = function () {
-                    (document.getElementById('metisConfirmIframe') as HTMLIFrameElement).contentWindow!.postMessage(transObj, confirmUrl.split('/#')[0]);
-                };
+                // send Message
+                this.initConfirmWindow(useIframe?'metisConfirmIframe':'', transObj, confirmUrl)
             },
             didClose: () => {
                 window.postMessage({status: 'ERROR', code: 1000, message: 'CANCEL'}, window.location.origin);
-            },
-        });
+            }
+        })
+
+        // const confirmWin = dialog.fire({
+        //     title: '<span style="font-size: 24px;font-weight: bold;color: #FFFFFF;font-family: Helvetica-Bold, Helvetica">Request Confirmation</span>',
+        //     html: `<iframe src="${confirmUrl}" style="width: 100%; height: ${height}px;" frameborder="0" id="metisConfirmIframe"></iframe>`,
+        //     width: `${width}px`,
+        //     showConfirmButton: false,
+        //     background: '#3A1319',
+        //     didOpen: (dom) => {
+        //         document.getElementById('metisConfirmIframe')!.onload = function () {
+        //             (document.getElementById('metisConfirmIframe') as HTMLIFrameElement).contentWindow!.postMessage(transObj, confirmUrl.split('/#')[0]);
+        //         };
+        //     },
+        //     didClose: () => {
+        //         window.postMessage({status: 'ERROR', code: 1000, message: 'CANCEL'}, window.location.origin);
+        //     },
+        // });
         const self = this;
         return new Promise((resolve, reject) => {
             function globalMessage(event: any) {
-                // log.debug(`event confirm: ${JSON.stringify(event.data)}`);
-                if (event.origin !== 'https://polis.metis.io'
-                    && event.origin !== 'https://polis-test.metis.io'
-                    && event.origin !== 'https://test-polis.metis.io'
-                    && event.origin !== 'http://localhost:1024' && event.origin + "/" != self.apiHost && event.origin !== window.location.origin) {
+                log.debug(`event confirm: ${JSON.stringify(event.data)}`);
+                if ( event.origin + "/" != self.authHost && event.origin !== window.location.origin) {
                     return;
                 }
                 if (event.data && event.data.status) {
@@ -455,7 +584,6 @@ export class PolisProvider extends JsonRpcEngine {
                     dialog.close(self.swalPromise);
                 }
             }
-            
             window.addEventListener('message', globalMessage, false);
         });
     }
@@ -466,38 +594,67 @@ export class PolisProvider extends JsonRpcEngine {
      * @private
      */
     private async polisBridgePage(data: any): Promise<any> {
+
         const bridgeUrl = this.bridgeUrl;
-        let height = 0;
-        if(this.providerOpts.debug){
-            height = 500
+        // check for openLink
+        if(this.providerOpts.openLink){
+           return this.providerOpts.openLink(bridgeUrl, data, data.walletType)
         }
-        const confirmWin = dialog.fire({
-            title: '',
-            html: `<iframe src="${bridgeUrl}" style="width: 100%; height: ${height}px;" frameborder="0" id="polisBridgeIframe"></iframe>`,
-            width: `${height}px`,
-            showConfirmButton: false,
-            background: '#3A1319',
-            didOpen: (dom:any) => {
-                document.getElementById('polisBridgeIframe')!.onload = function () {
-                // (document.getElementById('polisBridgeIframe') as HTMLIFrameElement).contentWindow!.document.addEventListener("DOMContentLoaded",function () {
-                    (document.getElementById('polisBridgeIframe') as HTMLIFrameElement).contentWindow!.postMessage(data, bridgeUrl.split('/#')[0]);
-                // })
-                //     console.log("iframe",document.getElementById('polisBridgeIframe'));
-                //     (dom.ownerDocument.getElementById('polisBridgeIframe') as HTMLIFrameElement).contentWindow!.postMessage(data, bridgeUrl.split('/#')[0]);
-               
-                };
-            },
-            didClose: () => {
-                window.postMessage({status: 'ERROR', code: 1000, message: 'CANCEL'}, window.location.origin);
-            },
-        });
+        // const bridgeUrl = "http://localhost:1024/#/oauth2/bridge"
+        const useIframe = this.checkNeedUserIframe(data.walletType)
+        // let height = 0;
+        // if(this.providerOpts.debug){
+            // height = 500
+        // }
+
+        // only for display walletconnet pop
+        let dialogOptions = useIframe ? {
+            html: `<iframe src="${bridgeUrl}" style="width: 100vw; height: 100vh;" frameborder="0" id="polisBridgeIframe"></iframe>`,
+            padding: '0px',
+            width: '100vw',
+            background: 'transparent',
+            customClass: {
+                container: 'full-screen'
+            }
+        } : {
+            html: `${this.safariaOpenWindowDom()}`,
+            background: '#151515',
+        }
+        dialog.fire({
+                title: '',
+                ...dialogOptions,
+                showConfirmButton: false,
+                didOpen: (dom:any) => {
+                    this.initConfirmWindow(useIframe?'polisBridgeIframe':'', data, bridgeUrl)
+                },
+                didClose: () => {
+                    window.postMessage({status: 'ERROR', code: 1000, message: 'CANCEL'}, window.location.origin);
+                },
+        })
+        // const confirmWin = dialog.fire({
+        //     title: '',
+        //     html: `<iframe src="${bridgeUrl}" style="width: 100%; height: ${height}px;" frameborder="0" id="polisBridgeIframe"></iframe>`,
+        //     width: `${height}px`,
+        //     showConfirmButton: false,
+        //     background: '#3A1319',
+        //     didOpen: (dom:any) => {
+        //         document.getElementById('polisBridgeIframe')!.onload = function () {
+        //         // (document.getElementById('polisBridgeIframe') as HTMLIFrameElement).contentWindow!.document.addEventListener("DOMContentLoaded",function () {
+        //             (document.getElementById('polisBridgeIframe') as HTMLIFrameElement).contentWindow!.postMessage(data, bridgeUrl.split('/#')[0]);
+        //         // })
+        //         //     console.log("iframe",document.getElementById('polisBridgeIframe'));
+        //         //     (dom.ownerDocument.getElementById('polisBridgeIframe') as HTMLIFrameElement).contentWindow!.postMessage(data, bridgeUrl.split('/#')[0]);
+        //
+        //         };
+        //     },
+        //     didClose: () => {
+        //         window.postMessage({status: 'ERROR', code: 1000, message: 'CANCEL'}, window.location.origin);
+        //     },
+        // });
         const self = this;
         return new Promise((resolve, reject) => {
             function globalMessage(event: any) {
-                if (event.origin !== 'https://polis.metis.io'
-                    && event.origin !== 'https://polis-test.metis.io'
-                    && event.origin !== 'https://test-polis.metis.io'
-                    && event.origin !== 'http://localhost:1024' && event.origin + "/" != self.apiHost && event.origin !== window.location.origin) {
+                if ( event.origin !== 'http://localhost:1024' && event.origin + "/" != self.authHost && event.origin !== window.location.origin) {
                     return;
                 }
                 log.debug(`event confirm: ${JSON.stringify(event.data)}`);
@@ -572,40 +729,41 @@ export class PolisProvider extends JsonRpcEngine {
             //todo not auth
             return Promise.reject(errors.TOKEN_IS_EMPTY);
         }
-        this.initWcConnector();
-        if (this._wcConnector) {
-            const txhash = await wallectConnector.sendTrans(this._wcConnector,
-                tx);
-            const recipt = '';
-            let savedTx: any;
-            tx.domain = '';
-            try {
-                savedTx = await this.saveTx(this.apiHost, this.token, 'save_app_tx', tx, true);
-                this.emit('debug', Object.assign({}, {action: 'save-tx'}, savedTx));
-                if (savedTx == null) {
-                    // server save tx error ,also return but status = IN_PROGRESSING because tx had success
-                    savedTx = {
-                        tx: txhash,
-                        status: 'SERVER_ERROR',
-                        chainId: tx.chainId,
-                        domain: tx.domain,
-                        data: 'ok',
-                        act: 'CREATE',
-                        value: tx.value,
-                    };
-                    this.emit('warning', Object.assign({}, {action: 'save-tx error'}, savedTx));
-                    return Promise.resolve(txhash);
-                    // return new Promise<any>((resolve, reject) => {
-                    //     reject(savedTx);
-                    // });
-                }
-            } catch (e) {
-                this.emit('warning', Object.assign({}, {action: 'save-tx error'}, e));
-                return Promise.resolve(txhash);
-            }
-            this.emit('debug', Object.assign({}, {action: 'save-tx surccess'}, savedTx));
-            return Promise.resolve(txhash);
-        }
+        // this.initWcConnector();
+        // if (this._wcConnector) {
+        //     const txhash = await wallectConnector.sendTrans(this._wcConnector,
+        //         tx);
+        //     const recipt = '';
+        //     let savedTx: any;
+        //     tx.domain = '';
+        //     try {
+        //         savedTx = await this.saveTx(this.apiHost, this.token, 'save_app_tx', tx, true);
+        //         this.emit('debug', Object.assign({}, {action: 'save-tx'}, savedTx));
+        //         if (savedTx == null) {
+        //             // server save tx error ,also return but status = IN_PROGRESSING because tx had success
+        //             savedTx = {
+        //                 tx: txhash,
+        //                 status: 'SERVER_ERROR',
+        //                 chainId: tx.chainId,
+        //                 domain: tx.domain,
+        //                 data: 'ok',
+        //                 act: 'CREATE',
+        //                 value: tx.value,
+        //             };
+        //             this.emit('warning', Object.assign({}, {action: 'save-tx error'}, savedTx));
+        //             return Promise.resolve(txhash);
+        //             // return new Promise<any>((resolve, reject) => {
+        //             //     reject(savedTx);
+        //             // });
+        //         }
+        //     } catch (e) {
+        //         this.emit('warning', Object.assign({}, {action: 'save-tx error'}, e));
+        //         return Promise.resolve(txhash);
+        //     }
+        //     this.emit('debug', Object.assign({}, {action: 'save-tx surccess'}, savedTx));
+        //     return Promise.resolve(txhash);
+        // }
+        return Promise.reject("unkown error");
     }
     
     async queryPolisTxAsync(chainId: number, tx: string, disableTooltip?: boolean): Promise<any> {
