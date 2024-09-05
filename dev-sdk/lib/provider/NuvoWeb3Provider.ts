@@ -5,25 +5,21 @@ import {
     JsonRpcApiProvider, Networkish,
     Provider,
     TransactionRequest,
-    TransactionResponse
+    TransactionResponse,
+    JsonRpcSigner,
+    Signer,
+    getAddress,
+    resolveAddress,
+    TypedDataEncoder
 } from "ethers";
 
-import { TX_TYPE, WALLET_TYPES } from "./utils";
-import log from "./utils/log";
-import {JsonRpcSigner} from "ethers/lib.commonjs/providers/provider-jsonrpc";
-import {Signer} from "ethers/lib.commonjs/providers/signer";
-import { getAddress, resolveAddress } from "ethers/lib.commonjs/address/index.js";
-import type { TransactionLike } from "ethers/lib.commonjs/transaction/index.js";
-import type { TypedDataDomain, TypedDataField } from "ethers/lib.commonjs/hash/index.js";
-import { TypedDataEncoder } from "ethers/lib.commonjs/hash/index.js";
+import type { TransactionLike, TypedDataDomain, TypedDataField } from "ethers";
 import {
-    getBigInt, hexlify, isHexString, toQuantity, toUtf8Bytes,
-    isError, makeError, assert, assertArgument,
-    FetchRequest, resolveProperties
-} from "ethers/lib.commonjs/utils/index.js";
+    hexlify, toUtf8Bytes,
+    isError, makeError, assert, assertArgument, resolveProperties
+} from "ethers";
 import {PolisProvider} from "./polisProvider";
 
-const errorGas = [ "call", "estimateGas" ];
 const Primitive = "bigint,boolean,function,number,string,symbol".split(/,/g);
 
 function deepCopy<T = any>(value: T): T {
