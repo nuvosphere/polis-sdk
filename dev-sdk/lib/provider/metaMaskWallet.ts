@@ -1,5 +1,5 @@
 import MetaMaskOnboarding from '@metamask/onboarding';
-import {ethers, toBeHex} from 'ethers';
+import {ethers, toBeHex, TypedDataDomain, TypedDataField} from 'ethers';
 import Swal from 'sweetalert2';
 import errors, { toError } from './erros';
 import log from "./utils/log"
@@ -422,6 +422,20 @@ export async function signMessage(msg: string): Promise<any> {
         return Promise.reject(e);
     }
 }
+
+export async function signTypedData(domain: TypedDataDomain, types: Record<string, Array<TypedDataField>>, value: Record<string, any>) {
+    try {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const signer = await provider.getSigner();
+        // fix: ambiguous primary types
+        delete types.EIP712Domain;
+        
+        return signer.signTypedData(domain, types, value);
+    } catch (e) {
+        return Promise.reject(e);
+    }
+}
+
 export default {
     getMetaMaskAddress,
     isConnectedMeta,
@@ -434,5 +448,6 @@ export default {
     addToken,
     checkMetaMaskInstall,
     signMessage,
+    signTypedData,
     addMetamaskEventCallback,
 };

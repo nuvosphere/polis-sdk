@@ -187,6 +187,11 @@ export class PolisProvider extends JsonRpcEngine implements Eip1193Provider {
                     end();
                 }
                 // }
+            } else if (req.method === 'eth_signTypedData_v4') {
+                if (this._wallet_type != WALLET_TYPES.POLIS) {      
+                    res.result = await this.signTypedData(req, res, this._wallet_type);
+                    end();
+                }
             }
             next();
         });
@@ -465,6 +470,49 @@ export class PolisProvider extends JsonRpcEngine implements Eip1193Provider {
             // this.initWcConnector();
             // if (this._wcConnector) {
             //     const signMsg = wallectConnector.signMessage(this._wcConnector, req.params[0]);
+            //     return signMsg;
+            // }
+        }
+        return Promise.reject(errors.ACCOUNT_NOT_EXIST);
+        
+    }
+
+    async signTypedData(req: any, res: any, walletType: string) {
+        let signMsg: any;
+        // if (walletType!= WALLET_TYPES.BITGET && (this._bridgeTx || walletType == WALLET_TYPES.LOCAL) ) {
+        //     // TODO
+        //     let postData = {
+        //         signContent: req.params[1],
+        //         txType: TX_TYPE.SIGN_TYPED_DATA,
+        //         accessToken: this.token ? this.token : "",
+        //         walletType: walletType,
+        //     }
+        //     signMsg = await this.polisBridgePage(postData);
+        //     return signMsg.data;
+        // }
+        
+        if (walletType == "METAMASK") {
+            if (!mmWallet.checkMetaMaskInstall()) {
+                this.emit("error", "metamask not install.")
+                return Promise.reject(errors.MM_NOT_INSTALL);
+            }
+            const data = JSON.parse(req.params[1]);
+            signMsg = await mmWallet.signTypedData(data.domain, data.types, data.message);
+            return signMsg;
+        }
+        if (walletType == WALLET_TYPES.BITGET) {
+            if (!pcProviderWallet.checkInstall()) {
+                this.emit("error", "BitGet wallet not install.")
+                return Promise.reject(errors.MM_NOT_INSTALL);
+            }
+            const data = JSON.parse(req.params[1]);
+            signMsg = await pcProviderWallet.signTypedData(data.domain, data.types, data.message);
+            return signMsg;
+        }
+        else if (walletType == "WALLETCONNECT") {
+            // this.initWcConnector();
+            // if (this._wcConnector) {
+            //     const signMsg = wallectConnector.signTypedData(this._wcConnector, req.params[1]);
             //     return signMsg;
             // }
         }

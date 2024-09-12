@@ -79,6 +79,14 @@ async function signPersonalMessage(connector:WalletConnect,msg: string): Promise
     }
 }
 
+async function signTypedData(connector:WalletConnect, data:any): Promise<any> {
+    if (connector.connected) {
+        return connector.signTypedData(data);
+    }else{
+        return Promise.reject(errors.WALLET_CONNECT_NOT_LOGIN);
+    }
+}
+
 /**
  * {
     "hash": "0xcc913e21df0c8e3d914aea5c30adf987ecfe6cac66c283a37787507d8520c3f0",
@@ -172,4 +180,4 @@ function subscribeToEvents(connector: WalletConnect) {
     });
 }
 
-export default {getWalletConnector ,getWalletConnectProvider , signMessage ,sendTrans }
+export default { getWalletConnector, getWalletConnectProvider , signMessage, sendTrans, signPersonalMessage, signTypedData }
