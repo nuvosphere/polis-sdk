@@ -3,9 +3,9 @@
 
 ## Change log
 
-- V1.2.3
-  - support signTypedData
-- V1.2.0
+- v1.2.3
+  - support `signTypedData`
+- v1.2.0
   - support ethers6
 - v1.1.41
   - support bitget wallet
