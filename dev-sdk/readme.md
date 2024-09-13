@@ -1,15 +1,19 @@
 
-# Nuvo  sdk
+# Nuvo SDK
 
 ## Change log
-- v1.2.0
+
+- V1.2.3
+  - support signTypedData
+- V1.2.0
   - support ethers6
-- v1.1.41 
+- v1.1.41
   - support bitget wallet
 
-## Sdk install
-```
-npm install --save-dev @metis.io/middleware-client
+## SDK install
+
+```shell
+npm install @metis.io/middleware-client
 ```
 
 To enable a user of a website/app to log into Nuvo and access its functionalities such as checking balance and sending transaction, follows these high level steps:
@@ -20,16 +24,18 @@ To enable a user of a website/app to log into Nuvo and access its functionalitie
 
 First we use this code example to demostrate how to initialize an Oauth2 client and acquire an access token from a user's account:
 
-# Oauth2 client
+## Oauth2 client
 
 ### import & create
-```
-    import { Oauth2Client } from '@metis.io/middleware-client'
 
-    let oauth2Client = new Oauth2Client()
+```javascript
+import { Oauth2Client } from '@metis.io/middleware-client'
+
+const oauth2Client = new Oauth2Client()
 ```
 
 ### start oauth
+
 ```javascript
 /**
  * switchAccount = true:  Does not automatically log in,default:false
@@ -38,44 +44,50 @@ First we use this code example to demostrate how to initialize an Oauth2 client 
 
 oauth2Client.startOauth2(`APPID`, `RETURN URL`, `newWindow`,`switchAccount`); 
 ```
+
 The `APPID` and `RETURN URL` can get from Polis Developer User page
 
 ### request access token & refresh token on RETURN URL page in backend
-```
-    get(`https://polis.metis.io/api/v1/oauth2/access_token?app_id=${this.appid}&app_key=${this.appsecret}&code=${this.code}`)
 
-    // if success
-    res => {
-        if (res.status == 200 && res.data && res.data.code == 200) {
-          // res.data.data.access_token
-          // res.data.data.refresh_token
-          // res.data.data.expires_in
-        }
-    }      
+```javascript
+get(`https://polis.metis.io/api/v1/oauth2/access_token?app_id=${this.appid}&app_key=${this.appsecret}&code=${this.code}`)
+
+// if success
+res => {
+    if (res.status == 200 && res.data && res.data.code == 200) {
+        // res.data.data.access_token
+        // res.data.data.refresh_token
+        // res.data.data.expires_in
+    }
+}      
 ```
 
 ### refresh token
-```
-    const oauth2User = await oauth2Client.refreshTokenAsync(`APPID`, `RefreshToken`)
+
+```javascript
+const oauth2User = await oauth2Client.refreshTokenAsync(`APPID`, `RefreshToken`)
 ```
 
 ### get user info
-```
-    const userInfo = await oauth2Client.getUserInfoAsync(`AccessToken`)
 
-    // user info struct {
-        'display_name': '',
-        'username': '',
-        'email': '',
-        'eth_address': '',
-        'last_login_time': timestamp
-    }
+```javascript
+const userInfo = await oauth2Client.getUserInfoAsync(`AccessToken`)
+
+// user info struct 
+{
+    'display_name': '',
+    'username': '',
+    'email': '',
+    'eth_address': '',
+    'last_login_time': timestamp
+}
 ```
 
 ### oauth logout
+
 ```javascript
 // refreshToken:options When refreshtoken is not empty, refreshtoken will also be deleted and cannot be used.
- logout(appId:string, accessToken:string, refreshToken:string="").then(res=>{
+logout(appId:string, accessToken:string, refreshToken:string="").then(res => {
     //res = {
     //     status: 200 
     //     msg: ""
@@ -89,15 +101,14 @@ The `APPID` and `RETURN URL` can get from Polis Developer User page
 })
 ```
 
-
 -----
 
 Once we acquired the access token, we can use either a PolisProvider object that is compatible with ethers provider, or a PolisClient object to access user account's functionalities. 
 
+## 1、Use Ethers BrowserProvider
 
-# 1、Use Ethers Web3Provider
+### step 1:  IPolisProviderOpts
 
-## step 1  IPolisProviderOpts
 ```javascript
 
 const opts: IPolisProviderOpts = {
@@ -108,18 +119,17 @@ const opts: IPolisProviderOpts = {
         }
 const polisprovider = new PolisProvider(opts)
 ```
-## step 2 Ethers Web3 Provider
-### ethers.js
+
+### step 2: Ethers Web3 Provider
 
 ```javascript
-ethersProvider = new ethers.BrowserProvider(polisprovider)
+const ethersProvider = new ethers.BrowserProvider(polisprovider)
 ```
 
+## 2、 Use Polis Client
 
+### step 1
 
-# 2、 Use Polis Client
-
-## step 1 
 ```javascript
 
 const clientOps:IPolisClientOpts = {
@@ -137,32 +147,35 @@ client.connect(oauthInfo);
 // 1.1.17 later
 await client.connect(oauthInfo);
 ```
-### Polis Client Events
+
+Polis Client Events
+
 ```javascript
 //event of debug
- this.polisclient.on('debug', function (data) {
+client.on('debug', function (data) {
         console.log('debug data:%s', JSON.stringify(data));
  })
 // event of error
-this.polisclient.on('error', function (data) {
+client.on('error', function (data) {
     console.log('error:', data instanceof Error)
 });
 //when metamask wallet
-this.polisclient.on('chainChanged', (chainId) => {
+client.on('chainChanged', (chainId) => {
     console.log('polis-client print chainId =>', chainId);
 });
-this.polisclient.on('accountsChanged', (account) => {
+client.on('accountsChanged', (account) => {
     console.log('polis-client print account =>', account);
 });
 ```
 
-## step 2  get Web3 Provider
+### step 2:  get Web3 Provider
+
 ```javascript
-ethersProvider=client.web3Provider // ethers.BrowserProvider
-//v1.2.0
-var singer = await ethersProvider.getSinger();
-//v1.1.x
-var singer =  ethersProvider.getSinger();
+const ethersProvider=client.web3Provider // ethers.BrowserProvider
+// v1.2.x
+const singer = await ethersProvider.getSinger();
+// v1.1.x
+// const singer = ethersProvider.getSinger();
 
 singer.signMessage("aa");
 
@@ -186,13 +199,9 @@ const daiAbi = [
 
 // v1.2.0 later
 const daiContract = await client.getContract(daiAddress, daiAbi);
-//v1.1.x
-const daiContract =  client.getContract(daiAddress, daiAbi);
+// v1.1.x
+// const daiContract =  client.getContract(daiAddress, daiAbi);
 
 await daiContract['name']();
 
 ```
-
-
-
-
