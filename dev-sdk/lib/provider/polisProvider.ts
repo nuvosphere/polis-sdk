@@ -450,7 +450,7 @@ export class PolisProvider extends JsonRpcEngine implements Eip1193Provider {
             return signMsg.data;
         }
         
-        if (walletType == "METAMASK") {
+        if (walletType == WALLET_TYPES.MM) {
             if (!mmWallet.checkMetaMaskInstall()) {
                 this.emit("error", "metamask not install.")
                 return Promise.reject(errors.MM_NOT_INSTALL);
@@ -466,7 +466,7 @@ export class PolisProvider extends JsonRpcEngine implements Eip1193Provider {
             signMsg = await pcProviderWallet.signMessage(req.params[0]);
             return signMsg;
         }
-        else if (walletType == "WALLETCONNECT") {
+        else if (walletType == WALLET_TYPES.WC) {
             // this.initWcConnector();
             // if (this._wcConnector) {
             //     const signMsg = wallectConnector.signMessage(this._wcConnector, req.params[0]);
@@ -491,7 +491,7 @@ export class PolisProvider extends JsonRpcEngine implements Eip1193Provider {
         //     return signMsg.data;
         // }
         
-        if (walletType == "METAMASK") {
+        if (walletType == WALLET_TYPES.MM) {
             if (!mmWallet.checkMetaMaskInstall()) {
                 this.emit("error", "metamask not install.")
                 return Promise.reject(errors.MM_NOT_INSTALL);
@@ -509,7 +509,7 @@ export class PolisProvider extends JsonRpcEngine implements Eip1193Provider {
             signMsg = await pcProviderWallet.signTypedData(data.domain, data.types, data.message);
             return signMsg;
         }
-        else if (walletType == "WALLETCONNECT") {
+        else if (walletType == WALLET_TYPES.WC) {
             // this.initWcConnector();
             // if (this._wcConnector) {
             //     const signMsg = wallectConnector.signTypedData(this._wcConnector, req.params[1]);
