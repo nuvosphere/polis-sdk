@@ -479,19 +479,16 @@ export class PolisProvider extends JsonRpcEngine implements Eip1193Provider {
 
     async signTypedData(req: any, res: any, walletType: string) {
         let signMsg: any;
-        // if (walletType!= WALLET_TYPES.BITGET && (this._bridgeTx || walletType == WALLET_TYPES.LOCAL) ) {
-        //     // TODO
-        //     let postData = {
-        //         signContent: req.params[1],
-        //         txType: TX_TYPE.SIGN_TYPED_DATA,
-        //         accessToken: this.token ? this.token : "",
-        //         walletType: walletType,
-        //     }
-        //     signMsg = await this.polisBridgePage(postData);
-        //     return signMsg.data;
-        // }
-        
-        if (walletType == WALLET_TYPES.MM) {
+        if (walletType!= WALLET_TYPES.BITGET && (this._bridgeTx || walletType == WALLET_TYPES.LOCAL) ) {
+            let postData = {
+                signContent: req.params[1],
+                txType: TX_TYPE.SIGN_TYPED_DATA,
+                accessToken: this.token ? this.token : "",
+                walletType: walletType,
+            }
+            signMsg = await this.polisBridgePage(postData);
+            return signMsg.data;
+        } else if (walletType == WALLET_TYPES.MM) {
             if (!mmWallet.checkMetaMaskInstall()) {
                 this.emit("error", "metamask not install.")
                 return Promise.reject(errors.MM_NOT_INSTALL);
@@ -499,8 +496,7 @@ export class PolisProvider extends JsonRpcEngine implements Eip1193Provider {
             const data = JSON.parse(req.params[1]);
             signMsg = await mmWallet.signTypedData(data.domain, data.types, data.message);
             return signMsg;
-        }
-        if (walletType == WALLET_TYPES.BITGET) {
+        } else if (walletType == WALLET_TYPES.BITGET) {
             if (!pcProviderWallet.checkInstall()) {
                 this.emit("error", "BitGet wallet not install.")
                 return Promise.reject(errors.MM_NOT_INSTALL);
@@ -509,13 +505,7 @@ export class PolisProvider extends JsonRpcEngine implements Eip1193Provider {
             signMsg = await pcProviderWallet.signTypedData(data.domain, data.types, data.message);
             return signMsg;
         }
-        else if (walletType == WALLET_TYPES.WC) {
-            // this.initWcConnector();
-            // if (this._wcConnector) {
-            //     const signMsg = wallectConnector.signTypedData(this._wcConnector, req.params[1]);
-            //     return signMsg;
-            // }
-        }
+
         return Promise.reject(errors.ACCOUNT_NOT_EXIST);
         
     }
@@ -598,6 +588,7 @@ export class PolisProvider extends JsonRpcEngine implements Eip1193Provider {
             }
 
         } else {
+            // @ts-ignore
             document.getElementById(this._openWindowBtnId).onclick = function() {
                 confirmWindow = window.open(confirmUrl)
                 // must to check new window is onloaded
@@ -743,11 +734,12 @@ export class PolisProvider extends JsonRpcEngine implements Eip1193Provider {
     private async polisBridgePage(data: any): Promise<any> {
 
         const bridgeUrl = this.bridgeUrl;
+        
         // check for openLink
         if(this.providerOpts.openLink){
            return this.providerOpts.openLink(bridgeUrl, data, data.walletType)
         }
-        // const bridgeUrl = "http://localhost:1024/#/oauth2/bridge"
+        // const bridgeUrl = "http://localhost:1025/#/oauth2/bridge"
         const useIframe = this.checkNeedUserIframe(data.walletType)
         // let height = 0;
         // if(this.providerOpts.debug){
