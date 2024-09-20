@@ -1,4 +1,4 @@
-import { ethers } from 'ethers';
+import { ethers, TypedDataDomain, TypedDataField } from 'ethers';
 import Swal from 'sweetalert2';
 import errors, { toError } from './erros';
 import log from "./utils/log"
@@ -441,6 +441,18 @@ export async function signMessage(msg: string): Promise<any> {
     }
 }
 
+export async function signTypedData(domain: TypedDataDomain, types: Record<string, Array<TypedDataField>>, value: Record<string, any>) {
+    try {
+        const provider = new ethers.BrowserProvider(getProvider());
+        const signer = await provider.getSigner();
+        // fix: ambiguous primary types
+        delete types.EIP712Domain;
+        return signer.signTypedData(domain, types, value);
+    } catch (e) {
+        return Promise.reject(e);
+    }
+}
+
 export default {
     getWalletAddress,
     isConnectedMeta,
@@ -453,5 +465,6 @@ export default {
     addToken,
     checkInstall,
     signMessage,
+    signTypedData,
     addWalletEventCallback,
 };

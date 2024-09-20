@@ -1,6 +1,7 @@
 
 export const TX_TYPE = {
   SIGN:'SIGN',
+  SIGN_TYPED_DATA:'SIGN_TYPED_DATA',
   SEND_TX:'TX',
   SEND_CON_TX:'TOKEN_TX'
 }
