@@ -103,7 +103,7 @@ logout(appId:string, accessToken:string, refreshToken:string="").then(res => {
 
 -----
 
-Once we acquired the access token, we can use either a PolisProvider object that is compatible with ethers provider, or a PolisClient object to access user account's functionalities. 
+Once we acquired the access token, we can use either a PolisProvider object that is compatible with ethers provider, or a PolisClient object to access user account's functionalities.
 
 ## 1、Use Ethers BrowserProvider
 

@@ -734,12 +734,12 @@ export class PolisProvider extends JsonRpcEngine implements Eip1193Provider {
     private async polisBridgePage(data: any): Promise<any> {
 
         const bridgeUrl = this.bridgeUrl;
-        
-        // check for openLink
-        if(this.providerOpts.openLink){
-           return this.providerOpts.openLink(bridgeUrl, data, data.walletType)
-        }
         // const bridgeUrl = "http://localhost:1025/#/oauth2/bridge"
+
+        // check for openLink
+        if (this.providerOpts.openLink){
+            return this.providerOpts.openLink(bridgeUrl, data, data.walletType)
+        }
         const useIframe = this.checkNeedUserIframe(data.walletType)
         // let height = 0;
         // if(this.providerOpts.debug){
