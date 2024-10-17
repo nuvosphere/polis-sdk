@@ -23,7 +23,7 @@ function getProvider(providerType:string=WALLET_TYPES.BITGET){
 
 function convert16(num: any) {
     // return '0x' + num.toString(16);
-    return ethers.toQuantity(num);
+    return ethers.toQuantity(num || 0);
     // return ethers.hexValue(num);
 }
 
